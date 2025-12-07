@@ -1,0 +1,17 @@
+// src/components/Common/Loading.jsx
+import React from 'react';
+
+const Loading = () => {
+  return (
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'center', 
+      alignItems: 'center', 
+      padding: '2rem' 
+    }}>
+      <div>Cargando...</div>
+    </div>
+  );
+};
+
+export default Loading;
