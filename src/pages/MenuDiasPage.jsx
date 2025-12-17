@@ -1,6 +1,6 @@
 // src/pages/MenuDiasPage.jsx (CON SISTEMA DE NOTIFICACIONES COMPLETO)
 import React, { useState, useEffect, useMemo } from 'react';
-import { useMenuDias } from '../hooks/useMenuDias';
+import { useMenuDias } from '../Hooks/useMenuDias';
 import ModalMenu from '../components/MenuDias/MenuDiasModal';
 import { ToastContainer, useToast } from '../components/Toast/Toast';
 import { 
