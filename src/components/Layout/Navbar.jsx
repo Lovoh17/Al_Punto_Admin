@@ -11,8 +11,9 @@ const LightNavbar = () => {
   const navItems = [
     { path: '/dashboard', label: 'Dashboard' },
     { path: '/productos', label: 'Productos' },
-    { path: '/Menu-Dias', label: 'Menus Diarios' },
+    { path: '/categorias', label: 'Categorias' },
     { path: '/pedidos', label: 'Pedidos' },
+    { path: '/Menu-Dias', label: 'Menus Diarios' },
     { path: '/Usuarios', label: 'Usuarios' }
   ];
 

@@ -1,5 +1,7 @@
+// src/pages/GestionUsuarios.jsx (CON SISTEMA DE NOTIFICACIONES)
 import React, { useState } from 'react';
 import { useUsuarios } from '../Hooks/useUsuarios';
+import { ToastContainer, useToast } from '../components/Toast/Toast'; // Importar Toast
 import { 
   FaUsers, 
   FaUserCheck, 
@@ -20,7 +22,8 @@ import {
   FaUserCircle,
   FaTimes,
   FaCheck,
-  FaSync
+  FaSync,
+  FaKey
 } from 'react-icons/fa';
 
 const colors = {
@@ -61,6 +64,9 @@ const GestionUsuarios = () => {
     eliminarUsuario
   } = useUsuarios();
 
+  // Hook de Toast
+  const toast = useToast();
+
   // Estado local para el modal
   const [modalAbierto, setModalAbierto] = useState(false);
   const [usuarioEditar, setUsuarioEditar] = useState(null);
@@ -75,6 +81,40 @@ const GestionUsuarios = () => {
 
   // Estado para mostrar/ocultar contraseña
   const [showPassword, setShowPassword] = useState(false);
+
+  // Estado para confirmaciones
+  const [showConfirmModal, setShowConfirmModal] = useState({
+    show: false,
+    title: '',
+    message: '',
+    type: 'danger',
+    onConfirm: null,
+    usuario: null
+  });
+
+  // Mostrar modal de confirmación
+  const showConfirmDialog = (title, message, onConfirm, type = 'danger', usuario = null) => {
+    setShowConfirmModal({
+      show: true,
+      title,
+      message,
+      type,
+      onConfirm,
+      usuario
+    });
+  };
+
+  // Cerrar modal de confirmación
+  const closeConfirmDialog = () => {
+    setShowConfirmModal({
+      show: false,
+      title: '',
+      message: '',
+      type: 'danger',
+      onConfirm: null,
+      usuario: null
+    });
+  };
 
   // Abrir modal para crear
   const abrirModalCrear = () => {
@@ -104,61 +144,150 @@ const GestionUsuarios = () => {
     setModalAbierto(true);
   };
 
+  // Validar formulario
+  const validarFormulario = () => {
+    if (!formData.nombre.trim()) {
+      toast.error('El nombre es requerido');
+      return false;
+    }
+    
+    if (!formData.email.trim()) {
+      toast.error('El email es requerido');
+      return false;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      toast.error('El email no es válido');
+      return false;
+    }
+    
+    if (!usuarioEditar && !formData.password) {
+      toast.error('La contraseña es requerida para nuevos usuarios');
+      return false;
+    }
+    
+    if (formData.password && formData.password.length < 6) {
+      toast.error('La contraseña debe tener al menos 6 caracteres');
+      return false;
+    }
+    
+    return true;
+  };
+
   // Manejar submit del formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const resultado = usuarioEditar 
-      ? await actualizarUsuario(usuarioEditar.id, formData)
-      : await crearUsuario(formData);
+    if (!validarFormulario()) {
+      return;
+    }
     
-    if (resultado.success) {
-      alert(resultado.mensaje);
-      setModalAbierto(false);
-    } else {
-      alert('Error: ' + resultado.error);
+    try {
+      const resultado = usuarioEditar 
+        ? await actualizarUsuario(usuarioEditar.id, formData)
+        : await crearUsuario(formData);
+      
+      if (resultado.success) {
+        toast.success(resultado.mensaje || (usuarioEditar 
+          ? 'Usuario actualizado correctamente' 
+          : 'Usuario creado correctamente'));
+        setModalAbierto(false);
+      } else {
+        toast.error(resultado.error || (usuarioEditar 
+          ? 'Error al actualizar el usuario' 
+          : 'Error al crear el usuario'));
+      }
+    } catch (error) {
+      console.log(error)
+      toast.error('Error al procesar la solicitud');
     }
   };
 
   // Manejar cambio de estado
-  const handleCambiarEstado = async (id, nuevoEstado) => {
-    const confirmacion = window.confirm(
+  const handleCambiarEstado = async (id, nuevoEstado, usuario) => {
+    showConfirmDialog(
+      nuevoEstado ? 'Activar usuario' : 'Desactivar usuario',
       nuevoEstado 
-        ? '¿Activar este usuario?'
-        : '¿Desactivar este usuario?'
+        ? `¿Deseas activar al usuario "${usuario.nombre}"?`
+        : `¿Deseas desactivar al usuario "${usuario.nombre}"?`,
+      async () => {
+        try {
+          const resultado = await cambiarEstado(id, nuevoEstado);
+          
+          if (resultado.success) {
+            toast.success(resultado.mensaje || `Usuario ${nuevoEstado ? 'activado' : 'desactivado'} correctamente`);
+          } else {
+            toast.error(resultado.error || `Error al ${nuevoEstado ? 'activar' : 'desactivar'} el usuario`);
+          }
+        } catch (error) {
+          console.log(error)
+          toast.error('Error al cambiar el estado del usuario');
+        }
+        closeConfirmDialog();
+      },
+      nuevoEstado ? 'success' : 'warning',
+      usuario
     );
-    
-    if (!confirmacion) return;
-    
-    const resultado = await cambiarEstado(id, nuevoEstado);
-    
-    if (!resultado.success) {
-      alert('Error: ' + resultado.error);
-    }
   };
 
   // Manejar cambio de rol
-  const handleCambiarRol = async (id, nuevoRol) => {
-    if (!window.confirm(`¿Cambiar rol del usuario a ${nuevoRol === 'administrador' ? 'Administrador' : 'Cliente'}?`)) return;
+  const handleCambiarRol = async (id, nuevoRol, usuario) => {
+    const rolTexto = nuevoRol === 'administrador' ? 'Administrador' : 'Cliente';
     
-    const resultado = await cambiarRol(id, nuevoRol);
-    
-    if (!resultado.success) {
-      alert('Error: ' + resultado.error);
-    }
+    showConfirmDialog(
+      'Cambiar rol de usuario',
+      `¿Cambiar rol del usuario "${usuario.nombre}" a ${rolTexto}?`,
+      async () => {
+        try {
+          const resultado = await cambiarRol(id, nuevoRol);
+          
+          if (resultado.success) {
+            toast.success(resultado.mensaje || `Rol cambiado a ${rolTexto} correctamente`);
+          } else {
+            toast.error(resultado.error || 'Error al cambiar el rol');
+          }
+        } catch (error) {
+          console.log(error)
+          toast.error('Error al cambiar el rol del usuario');
+        }
+        closeConfirmDialog();
+      },
+      'info',
+      usuario
+    );
   };
 
   // Manejar eliminación
   const handleEliminar = async (id, usuarioNombre) => {
-    if (!window.confirm(`¿Estás seguro de eliminar al usuario "${usuarioNombre}"? Esta acción no se puede deshacer.`)) return;
-    
-    const resultado = await eliminarUsuario(id);
-    
-    if (resultado.success) {
-      alert(resultado.mensaje);
-    } else {
-      alert('Error: ' + resultado.error);
-    }
+    showConfirmDialog(
+      'Eliminar usuario',
+      `¿Estás seguro de eliminar al usuario "${usuarioNombre}"? Esta acción no se puede deshacer.`,
+      async () => {
+        try {
+          const resultado = await eliminarUsuario(id);
+          
+          if (resultado.success) {
+            toast.success(resultado.mensaje || 'Usuario eliminado correctamente');
+          } else {
+            toast.error(resultado.error || 'Error al eliminar el usuario');
+          }
+        } catch (error) {
+            console.log(error)
+          toast.error('Error al eliminar el usuario');
+        }
+        closeConfirmDialog();
+      },
+      'danger'
+    );
+  };
+
+  // Limpiar filtros
+  const clearFilters = () => {
+    setBusqueda('');
+    setFiltroRol('todos');
+    setFiltroEstado('todos');
+    toast.info('Filtros limpiados');
   };
 
   // Obtener color de avatar basado en el nombre
@@ -188,6 +317,7 @@ const GestionUsuarios = () => {
         year: 'numeric'
       });
     } catch (error) {
+      console.log(error)
       return fechaString;
     }
   };
@@ -196,6 +326,7 @@ const GestionUsuarios = () => {
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
+        <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
         <div style={styles.spinner}></div>
         <p style={styles.loadingText}>Cargando usuarios...</p>
       </div>
@@ -204,6 +335,20 @@ const GestionUsuarios = () => {
 
   return (
     <div style={styles.container}>
+      {/* Sistema de notificaciones Toast */}
+      <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
+
+      {/* Modal de confirmación */}
+      {showConfirmModal.show && (
+        <ConfirmModal
+          title={showConfirmModal.title}
+          message={showConfirmModal.message}
+          type={showConfirmModal.type}
+          onConfirm={showConfirmModal.onConfirm}
+          onCancel={closeConfirmDialog}
+        />
+      )}
+
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
@@ -281,9 +426,22 @@ const GestionUsuarios = () => {
             <FaFilter style={styles.filtersIcon} />
             Filtros y Búsqueda
           </h3>
-          <span style={styles.resultsCount}>
-            {usuariosFiltrados.length} usuarios encontrados
-          </span>
+          <div style={styles.resultsSection}>
+            <span style={styles.resultsCount}>
+              {usuariosFiltrados.length} usuarios encontrados
+            </span>
+            <button
+              onClick={() => {
+                cargarUsuarios();
+                toast.info('Actualizando lista de usuarios...');
+              }}
+              style={styles.refreshButton}
+              title="Actualizar usuarios"
+            >
+              <FaSync />
+              <span>Actualizar</span>
+            </button>
+          </div>
         </div>
         
         <div style={styles.filtersContent}>
@@ -296,28 +454,58 @@ const GestionUsuarios = () => {
               onChange={(e) => setBusqueda(e.target.value)}
               style={styles.searchInput}
             />
+            {busqueda && (
+              <button 
+                onClick={() => setBusqueda('')}
+                style={styles.clearSearchButton}
+                title="Limpiar búsqueda"
+              >
+                <FaTimes />
+              </button>
+            )}
           </div>
           
           <div style={styles.filtersRow}>
-            <select
-              value={filtroRol}
-              onChange={(e) => setFiltroRol(e.target.value)}
-              style={styles.filterSelect}
-            >
-              <option value="todos">Todos los roles</option>
-              <option value="administrador">Administradores</option>
-              <option value="cliente">Clientes</option>
-            </select>
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Rol</label>
+              <select
+                value={filtroRol}
+                onChange={(e) => setFiltroRol(e.target.value)}
+                style={styles.filterSelect}
+              >
+                <option value="todos">Todos los roles</option>
+                <option value="administrador">Administradores</option>
+                <option value="cliente">Clientes</option>
+              </select>
+            </div>
 
-            <select
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value)}
-              style={styles.filterSelect}
-            >
-              <option value="todos">Todos los estados</option>
-              <option value="activo">Solo activos</option>
-              <option value="inactivo">Solo inactivos</option>
-            </select>
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Estado</label>
+              <select
+                value={filtroEstado}
+                onChange={(e) => setFiltroEstado(e.target.value)}
+                style={styles.filterSelect}
+              >
+                <option value="todos">Todos los estados</option>
+                <option value="activo">Solo activos</option>
+                <option value="inactivo">Solo inactivos</option>
+              </select>
+            </div>
+
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Acciones</label>
+              <div style={styles.filterActions}>
+                <button
+                  onClick={clearFilters}
+                  style={styles.clearFiltersButton}
+                  disabled={!busqueda && filtroRol === 'todos' && filtroEstado === 'todos'}
+                  title="Limpiar todos los filtros"
+                >
+                  <FaTimes />
+                  <span>Limpiar Filtros</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -329,7 +517,10 @@ const GestionUsuarios = () => {
           <h3 style={styles.errorTitle}>Error al cargar usuarios</h3>
           <p style={styles.errorText}>{error}</p>
           <button 
-            onClick={cargarUsuarios} 
+            onClick={() => {
+              cargarUsuarios();
+              toast.info('Reintentando cargar usuarios...');
+            }} 
             style={styles.retryButton}
           >
             <FaSync />
@@ -353,18 +544,23 @@ const GestionUsuarios = () => {
               ? 'No hay usuarios con esos filtros'
               : 'Cuando se registren usuarios, aparecerán aquí'}
           </p>
-          {(busqueda || filtroRol !== 'todos' || filtroEstado !== 'todos') && (
+          <div style={styles.emptyActions}>
+            {(busqueda || filtroRol !== 'todos' || filtroEstado !== 'todos') && (
+              <button
+                onClick={clearFilters}
+                style={styles.clearFiltersButton}
+              >
+                Limpiar filtros
+              </button>
+            )}
             <button
-              onClick={() => {
-                setBusqueda('');
-                setFiltroRol('todos');
-                setFiltroEstado('todos');
-              }}
-              style={styles.clearFiltersButton}
+              onClick={abrirModalCrear}
+              style={styles.btnPrimary}
             >
-              Limpiar filtros
+              <FaPlus />
+              Crear Usuario
             </button>
-          )}
+          </div>
         </div>
       ) : (
         <div style={styles.tableContainer}>
@@ -431,7 +627,7 @@ const GestionUsuarios = () => {
                   <td style={styles.td}>
                     <select
                       value={usuario.rol}
-                      onChange={(e) => handleCambiarRol(usuario.id, e.target.value)}
+                      onChange={(e) => handleCambiarRol(usuario.id, e.target.value, usuario)}
                       style={{
                         ...styles.rolSelect,
                         backgroundColor: usuario.rol === 'administrador' 
@@ -451,7 +647,7 @@ const GestionUsuarios = () => {
                   </td>
                   <td style={styles.td}>
                     <button
-                      onClick={() => handleCambiarEstado(usuario.id, !usuario.activo)}
+                      onClick={() => handleCambiarEstado(usuario.id, !usuario.activo, usuario)}
                       style={{
                         ...styles.estadoButton,
                         backgroundColor: usuario.activo 
@@ -464,6 +660,7 @@ const GestionUsuarios = () => {
                           ? '#10b981' 
                           : '#ef4444'
                       }}
+                      title={usuario.activo ? 'Desactivar usuario' : 'Activar usuario'}
                     >
                       {usuario.activo ? (
                         <>
@@ -608,6 +805,12 @@ const GestionUsuarios = () => {
                     {showPassword ? <FaEyeSlash /> : <FaEye />}
                   </button>
                 </div>
+                {usuarioEditar && (
+                  <div style={styles.passwordHint}>
+                    <FaKey style={styles.hintIcon} />
+                    <span style={styles.hintText}>Dejar vacío para mantener la contraseña actual</span>
+                  </div>
+                )}
               </div>
 
               <div style={styles.formRow}>
@@ -667,7 +870,10 @@ const GestionUsuarios = () => {
               <div style={styles.modalFooter}>
                 <button 
                   type="button" 
-                  onClick={() => setModalAbierto(false)} 
+                  onClick={() => {
+                    setModalAbierto(false);
+                    toast.info('Operación cancelada');
+                  }} 
                   style={styles.btnSecondary}
                 >
                   Cancelar
@@ -687,11 +893,165 @@ const GestionUsuarios = () => {
   );
 };
 
+// Componente Modal de Confirmación
+const ConfirmModal = ({ title, message, type, onConfirm, onCancel }) => {
+  const getTypeStyles = () => {
+    switch (type) {
+      case 'danger':
+        return {
+          color: '#ef4444',
+          buttonBg: '#ef4444',
+          buttonHover: '#dc2626'
+        };
+      case 'warning':
+        return {
+          color: '#f59e0b',
+          buttonBg: '#f59e0b',
+          buttonHover: '#d97706'
+        };
+      case 'success':
+        return {
+          color: '#10b981',
+          buttonBg: '#10b981',
+          buttonHover: '#059669'
+        };
+      case 'info':
+        return {
+          color: '#3b82f6',
+          buttonBg: '#3b82f6',
+          buttonHover: '#2563eb'
+        };
+      default:
+        return {
+          color: colors.primary,
+          buttonBg: colors.primary,
+          buttonHover: colors.primaryLight
+        };
+    }
+  };
+
+  const typeStyles = getTypeStyles();
+
+  return (
+    <div style={confirmStyles.overlay} onClick={onCancel}>
+      <div style={confirmStyles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={confirmStyles.header}>
+          <div style={{...confirmStyles.iconContainer, backgroundColor: typeStyles.color + '20'}}>
+            <FaExclamationTriangle style={{color: typeStyles.color, fontSize: '32px'}} />
+          </div>
+          <h3 style={confirmStyles.title}>{title}</h3>
+        </div>
+        <p style={confirmStyles.message}>{message}</p>
+        <div style={confirmStyles.actions}>
+          <button
+            onClick={onCancel}
+            style={confirmStyles.cancelButton}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              ...confirmStyles.confirmButton,
+              backgroundColor: typeStyles.buttonBg
+            }}
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const confirmStyles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    backdropFilter: 'blur(4px)'
+  },
+  modal: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    padding: '32px',
+    maxWidth: '480px',
+    width: '90%',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    animation: 'modalSlideIn 0.2s ease-out'
+  },
+  header: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '16px',
+    marginBottom: '24px'
+  },
+  iconContainer: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  title: {
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#111827',
+    margin: 0,
+    textAlign: 'center'
+  },
+  message: {
+    fontSize: '16px',
+    color: '#6b7280',
+    lineHeight: '1.6',
+    marginBottom: '32px',
+    textAlign: 'center'
+  },
+  actions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end'
+  },
+  cancelButton: {
+    padding: '12px 24px',
+    borderRadius: '8px',
+    border: '2px solid #e5e7eb',
+    backgroundColor: '#ffffff',
+    color: '#6b7280',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    flex: 1
+  },
+  confirmButton: {
+    padding: '12px 24px',
+    borderRadius: '8px',
+    border: 'none',
+    color: '#ffffff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    flex: 1
+  }
+};
+
 const styles = {
   container: {
     padding: '32px',
     backgroundColor: colors.background,
-    minHeight: '100vh'
+    minHeight: '100vh',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   
   // Header
@@ -717,7 +1077,8 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: '12px',
-    fontSize: '28px'
+    fontSize: '28px',
+    boxShadow: '0 4px 12px rgba(44, 90, 160, 0.2)'
   },
   title: {
     fontSize: '32px',
@@ -749,7 +1110,8 @@ const styles = {
     transition: 'all 0.2s ease',
     '&:hover': {
       backgroundColor: colors.primaryLight,
-      transform: 'translateY(-1px)'
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 12px rgba(44, 90, 160, 0.2)'
     }
   },
   
@@ -771,7 +1133,8 @@ const styles = {
     alignItems: 'center',
     gap: '20px',
     transition: 'all 0.2s ease',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    cursor: 'pointer'
   },
   statIcon: {
     width: '60px',
@@ -806,13 +1169,15 @@ const styles = {
     borderRadius: '12px',
     padding: '24px',
     marginBottom: '32px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
   },
   filtersHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px'
+    marginBottom: '20px',
+    flexWrap: 'wrap',
+    gap: '16px'
   },
   filtersTitle: {
     fontSize: '18px',
@@ -826,13 +1191,32 @@ const styles = {
   filtersIcon: {
     color: colors.primary
   },
+  resultsSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px'
+  },
   resultsCount: {
     backgroundColor: colors.primary + '20',
     color: colors.primary,
-    padding: '6px 16px',
+    padding: '8px 16px',
     borderRadius: '20px',
     fontSize: '14px',
     fontWeight: '600'
+  },
+  refreshButton: {
+    backgroundColor: colors.primary,
+    color: '#ffffff',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
   },
   filtersContent: {
     display: 'flex',
@@ -861,16 +1245,43 @@ const styles = {
     transition: 'all 0.2s ease',
     backgroundColor: colors.card,
     color: colors.text.primary,
+    outline: 'none',
     '&:focus': {
-      outline: 'none',
       borderColor: colors.primary,
       boxShadow: `0 0 0 3px ${colors.primary}20`
     }
   },
+  clearSearchButton: {
+    position: 'absolute',
+    right: '16px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: colors.text.light,
+    cursor: 'pointer',
+    fontSize: '16px',
+    padding: '4px',
+    '&:hover': {
+      color: colors.text.primary
+    }
+  },
   filtersRow: {
     display: 'flex',
-    gap: '16px',
+    gap: '20px',
     flexWrap: 'wrap'
+  },
+  filterGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    flex: 1,
+    minWidth: '200px'
+  },
+  filterLabel: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: colors.text.primary
   },
   filterSelect: {
     padding: '12px 16px',
@@ -882,11 +1293,37 @@ const styles = {
     transition: 'all 0.2s ease',
     backgroundColor: colors.card,
     color: colors.text.primary,
-    minWidth: '180px',
+    minWidth: '200px',
+    outline: 'none',
     '&:focus': {
-      outline: 'none',
       borderColor: colors.primary,
       boxShadow: `0 0 0 3px ${colors.primary}20`
+    }
+  },
+  filterActions: {
+    display: 'flex',
+    gap: '12px',
+    marginTop: '24px'
+  },
+  clearFiltersButton: {
+    backgroundColor: colors.text.secondary,
+    border: `2px solid ${colors.text.secondary}`,
+    color: '#ffffff',
+    padding: '10px 16px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+    '&:disabled': {
+      backgroundColor: colors.border,
+      borderColor: colors.border,
+      color: colors.text.light,
+      cursor: 'not-allowed',
+      opacity: 0.6
     }
   },
   
@@ -895,7 +1332,7 @@ const styles = {
     backgroundColor: colors.card,
     borderRadius: '12px',
     overflow: 'auto',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
     marginBottom: '32px'
   },
   table: {
@@ -1084,7 +1521,8 @@ const styles = {
     transition: 'all 0.2s ease',
     '&:hover': {
       backgroundColor: colors.primary,
-      color: '#ffffff'
+      color: '#ffffff',
+      transform: 'translateY(-1px)'
     }
   },
   btnDelete: {
@@ -1103,7 +1541,8 @@ const styles = {
     transition: 'all 0.2s ease',
     '&:hover': {
       backgroundColor: colors.danger,
-      color: '#ffffff'
+      color: '#ffffff',
+      transform: 'translateY(-1px)'
     }
   },
   
@@ -1268,6 +1707,21 @@ const styles = {
       color: colors.text.primary
     }
   },
+  passwordHint: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    marginTop: '8px',
+    fontSize: '12px',
+    color: colors.text.light
+  },
+  hintIcon: {
+    fontSize: '12px'
+  },
+  hintText: {
+    fontSize: '12px',
+    fontStyle: 'italic'
+  },
   select: {
     width: '100%',
     padding: '12px 16px',
@@ -1336,7 +1790,8 @@ const styles = {
     borderRadius: '12px',
     padding: '60px 32px',
     textAlign: 'center',
-    marginTop: '32px'
+    marginTop: '32px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
   },
   errorIcon: {
     fontSize: '64px',
@@ -1373,7 +1828,8 @@ const styles = {
     gap: '8px',
     margin: '0 auto',
     '&:hover': {
-      backgroundColor: colors.primaryLight
+      backgroundColor: colors.primaryLight,
+      transform: 'translateY(-1px)'
     }
   },
   
@@ -1384,7 +1840,8 @@ const styles = {
     padding: '60px 32px',
     textAlign: 'center',
     border: `2px dashed ${colors.border}`,
-    marginTop: '32px'
+    marginTop: '32px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
   },
   emptyIcon: {
     fontSize: '64px',
@@ -1407,20 +1864,12 @@ const styles = {
     marginLeft: 'auto',
     marginRight: 'auto'
   },
-  clearFiltersButton: {
-    backgroundColor: colors.primary,
-    color: '#ffffff',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      backgroundColor: colors.primaryLight
-    }
-  }
+  emptyActions: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '12px',
+    flexWrap: 'wrap'
+  },
 };
 
 // Inyectar animaciones CSS
@@ -1447,6 +1896,17 @@ if (typeof document !== 'undefined') {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
     
     /* Scrollbar styling */
     *::-webkit-scrollbar {
@@ -1466,6 +1926,16 @@ if (typeof document !== 'undefined') {
     
     *::-webkit-scrollbar-thumb:hover {
       background: #a8a8a8;
+    }
+    
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
     }
   `;
   document.head.appendChild(styleSheet);

@@ -1,8 +1,9 @@
-// src/pages/PedidosPage.jsx
-import React, { useState, useEffect } from 'react';
+// src/pages/PedidosPage.jsx (CON SISTEMA DE NOTIFICACIONES)
+import React, { useState, useEffect, useMemo } from 'react';
 import { usePedidos } from '../Hooks/usePedidos';
-import PedidoCard from '../components/Pedidos/PedidosCards'; // Corregí el nombre del import
+import PedidoCard from '../components/Pedidos/PedidosCards';
 import PedidoDetalleModal from '../components/Pedidos/PedidoDetalleModal';
+import { ToastContainer, useToast } from '../components/Toast/Toast'; // Importar sistema Toast
 import { 
   FaShoppingCart, 
   FaFilter, 
@@ -13,7 +14,10 @@ import {
   FaCheckCircle,
   FaTruck,
   FaTimesCircle,
-  FaExclamationTriangle
+  FaExclamationTriangle,
+  FaPrint,
+  FaEye,
+  FaSync
 } from 'react-icons/fa';
 
 const PedidosPage = () => {
@@ -24,31 +28,77 @@ const PedidosPage = () => {
     cambiarEstado, 
     cancelarPedido, 
     eliminarPedido,
-    obtenerDetallePedido 
+    obtenerDetallePedido,
+    refetchPedidos
   } = usePedidos();
+
+  const toast = useToast(); // Hook de Toast
 
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [pedidoDetalle, setPedidoDetalle] = useState(null);
   const [productosDetalle, setProductosDetalle] = useState(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
 
-  // Calcular estadísticas
-  const stats = {
-    total: pedidos.length,
-    pendientes: pedidos.filter(p => p.estado === 'pendiente').length,
-    enPreparacion: pedidos.filter(p => p.estado === 'en_preparacion').length,
-    listos: pedidos.filter(p => p.estado === 'listo').length,
-    entregados: pedidos.filter(p => p.estado === 'entregado').length,
-    cancelados: pedidos.filter(p => p.estado === 'cancelado').length,
-    totalVentas: pedidos.reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0)
-  };
-
-  useEffect(() => {
-    console.log('📊 Pedidos cargados:', pedidos.length);
+  // Calcular estadísticas con useMemo
+  const stats = useMemo(() => {
+    const total = pedidos.length;
+    const pendientes = pedidos.filter(p => p.estado === 'pendiente').length;
+    const enPreparacion = pedidos.filter(p => p.estado === 'en_preparacion').length;
+    const listos = pedidos.filter(p => p.estado === 'listo').length;
+    const entregados = pedidos.filter(p => p.estado === 'entregado').length;
+    const cancelados = pedidos.filter(p => p.estado === 'cancelado').length;
+    const totalVentas = pedidos.reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
+    
+    // Ventas por estado
+    const ventasPendientes = pedidos
+      .filter(p => p.estado === 'pendiente')
+      .reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
+    
+    const ventasEntregados = pedidos
+      .filter(p => p.estado === 'entregado')
+      .reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
+    
+    return { 
+      total, 
+      pendientes, 
+      enPreparacion, 
+      listos, 
+      entregados, 
+      cancelados, 
+      totalVentas,
+      ventasPendientes,
+      ventasEntregados
+    };
   }, [pedidos]);
 
-  // Función para generar contenido PDF mejorado
+  // Refrescar pedidos automáticamente cada 30 segundos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refetchPedidos();
+      toast.info('Pedidos actualizados automáticamente', 3000);
+    }, 30000); // 30 segundos
+
+    return () => clearInterval(interval);
+  }, [refetchPedidos, toast]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refetchPedidos();
+      toast.success('Pedidos actualizados correctamente');
+    } catch (error) {
+      console.log(error);
+      toast.error('Error al actualizar pedidos');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const generarPDFContenido = (pedido) => {
     const formatFecha = (fechaString) => {
       try {
@@ -61,6 +111,7 @@ const PedidosPage = () => {
           minute: '2-digit'
         });
       } catch (error) {
+        console.log(error);
         return fechaString;
       }
     };
@@ -330,8 +381,20 @@ const PedidosPage = () => {
     `;
   };
 
-  const handleImprimirPDF = (pedido) => {
+  const handleImprimirPDF = async (pedido) => {
     try {
+      // Si no tenemos los productos del detalle, cargarlos primero
+      if (!productosDetalle || pedido.id !== pedidoDetalle?.id) {
+        toast.info('Cargando detalles del pedido para imprimir...', 2000);
+        const result = await obtenerDetallePedido(pedido.id);
+        if (result.success) {
+          setProductosDetalle(result.data);
+        } else {
+          toast.error('Error al cargar detalles del pedido');
+          return;
+        }
+      }
+
       // Abrir ventana para imprimir
       const ventana = window.open('', '_blank', 'width=800,height=600');
       
@@ -345,6 +408,8 @@ const PedidosPage = () => {
         setTimeout(() => {
           ventana.focus();
           ventana.print();
+          toast.success('PDF generado correctamente');
+          
           // Cerrar ventana después de imprimir
           setTimeout(() => {
             if (!ventana.closed) {
@@ -356,54 +421,103 @@ const PedidosPage = () => {
       
     } catch (error) {
       console.error('Error al generar PDF:', error);
-      alert('Error al generar el PDF. Por favor, intente nuevamente.');
+      toast.error('Error al generar el PDF. Por favor, intente nuevamente.');
     }
   };
 
   const handleCambiarEstado = async (id, nuevoEstado) => {
-    if (window.confirm(`¿Cambiar estado del pedido a "${nuevoEstado}"?`)) {
+    const estadoLabels = {
+      pendiente: 'Pendiente',
+      en_preparacion: 'En Preparación',
+      listo: 'Listo',
+      entregado: 'Entregado',
+      cancelado: 'Cancelado'
+    };
+
+    /*const confirmacion = window.confirm(
+      `¿Cambiar estado del pedido #${id} a "${estadoLabels[nuevoEstado]}"?`
+    );
+    
+    if (!confirmacion) {
+      toast.info('Cambio de estado cancelado');
+      return;
+    }*/
+
+    try {
       const result = await cambiarEstado(id, nuevoEstado);
       if (result.success) {
-        alert('✅ Estado actualizado exitosamente');
+        toast.success(` Estado del pedido actualizado a "${estadoLabels[nuevoEstado]}"`);
       } else {
-        alert(`❌ ${result.error}`);
+        toast.error(` ${result.error || 'Error al cambiar el estado'}`);
       }
+    } catch (error) {
+      console.log(error);
+      toast.error(' Error al cambiar el estado del pedido');
     }
   };
 
-  const handleCancelar = async (id) => {
-    if (window.confirm('¿Estás seguro de cancelar este pedido?')) {
-      const result = await cancelarPedido(id);
-      if (result.success) {
-        alert('✅ Pedido cancelado exitosamente');
-      } else {
-        alert(`❌ ${result.error}`);
-      }
-    }
+  const handleCancelarClick = (pedido) => {
+    setPedidoSeleccionado(pedido);
+    setShowCancelConfirm(true);
   };
 
-  const handleEliminar = async (id) => {
-    if (window.confirm('¿Estás seguro de eliminar este pedido? Esta acción no se puede deshacer.')) {
-      const result = await eliminarPedido(id);
-      if (result.success) {
-        alert('✅ Pedido eliminado exitosamente');
-      } else {
-        alert(`❌ ${result.error}`);
+  const handleConfirmCancel = async () => {
+    if (pedidoSeleccionado) {
+      try {
+        const result = await cancelarPedido(pedidoSeleccionado.id);
+        if (result.success) {
+          toast.success(' Pedido cancelado exitosamente');
+        } else {
+          toast.error(` ${result.error || 'Error al cancelar el pedido'}`);
+        }
+      } catch (error) {
+        console.log(error);
+        toast.error(' Error al cancelar el pedido');
       }
     }
+    setShowCancelConfirm(false);
+    setPedidoSeleccionado(null);
+  };
+
+  const handleEliminarClick = (pedido) => {
+    setPedidoSeleccionado(pedido);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (pedidoSeleccionado) {
+      try {
+        const result = await eliminarPedido(pedidoSeleccionado.id);
+        if (result.success) {
+          toast.success(' Pedido eliminado exitosamente');
+        } else {
+          toast.error(` ${result.error || 'Error al eliminar el pedido'}`);
+        }
+      } catch (error) {
+        console.log(error);
+        toast.error(' Error al eliminar el pedido');
+      }
+    }
+    setShowDeleteConfirm(false);
+    setPedidoSeleccionado(null);
   };
 
   const handleVerDetalle = async (pedido) => {
-    console.log('🔍 Viendo detalle del pedido:', pedido);
     setCargandoDetalle(true);
     setPedidoDetalle(pedido);
     
-    const result = await obtenerDetallePedido(pedido.id);
-    if (result.success) {
-      console.log('✅ Detalle cargado:', result.data);
-      setProductosDetalle(result.data);
-    } else {
-      alert(`❌ ${result.error}`);
+    try {
+      const result = await obtenerDetallePedido(pedido.id);
+      if (result.success) {
+        setProductosDetalle(result.data);
+        toast.info('Detalles del pedido cargados');
+      } else {
+        toast.error(` ${result.error || 'Error al cargar detalles'}`);
+        setPedidoDetalle(null);
+      }
+    } catch (error) {
+      console.log(error);
+      toast.error(' Error al cargar detalles del pedido');
       setPedidoDetalle(null);
     }
     
@@ -415,30 +529,39 @@ const PedidosPage = () => {
     setProductosDetalle(null);
   };
 
-  // Filtrar pedidos
-  const pedidosFiltrados = pedidos.filter(pedido => {
-    // Filtrar por estado
-    if (filtroEstado !== 'todos' && pedido.estado !== filtroEstado) {
-      return false;
-    }
-    
-    // Filtrar por búsqueda
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase();
-      return (
-        pedido.numero_pedido?.toLowerCase().includes(term) ||
-        pedido.cliente_nombre?.toLowerCase().includes(term) ||
-        pedido.cliente_telefono?.toLowerCase().includes(term) ||
-        pedido.numero_mesa?.toLowerCase().includes(term)
-      );
-    }
-    
-    return true;
-  });
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFiltroEstado('todos');
+    toast.info('Filtros limpiados');
+  };
+
+  // Filtrar pedidos con useMemo
+  const pedidosFiltrados = useMemo(() => {
+    return pedidos.filter(pedido => {
+      // Filtrar por estado
+      if (filtroEstado !== 'todos' && pedido.estado !== filtroEstado) {
+        return false;
+      }
+      
+      // Filtrar por búsqueda
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        return (
+          pedido.numero_pedido?.toLowerCase().includes(term) ||
+          pedido.cliente_nombre?.toLowerCase().includes(term) ||
+          pedido.cliente_telefono?.toLowerCase().includes(term) ||
+          pedido.numero_mesa?.toLowerCase().includes(term)
+        );
+      }
+      
+      return true;
+    });
+  }, [pedidos, filtroEstado, searchTerm]);
 
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
+        <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
         <div style={styles.spinner}></div>
         <p style={styles.loadingText}>Cargando pedidos...</p>
       </div>
@@ -448,6 +571,7 @@ const PedidosPage = () => {
   if (error) {
     return (
       <div style={styles.errorContainer}>
+        <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
         <FaExclamationTriangle style={styles.errorIcon} />
         <h3 style={styles.errorTitle}>Error al cargar pedidos</h3>
         <p style={styles.errorText}>{error}</p>
@@ -455,6 +579,7 @@ const PedidosPage = () => {
           onClick={() => window.location.reload()} 
           style={styles.retryButton}
         >
+          <FaSync />
           Reintentar
         </button>
       </div>
@@ -463,6 +588,87 @@ const PedidosPage = () => {
 
   return (
     <div style={styles.container}>
+      {/* Sistema de notificaciones Toast */}
+      <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
+
+      {/* Modal de confirmación para cancelar */}
+      {showCancelConfirm && (
+        <div style={styles.confirmOverlay}>
+          <div style={styles.confirmModal}>
+            <div style={styles.confirmHeader}>
+              <div style={{...styles.confirmIcon, backgroundColor: colors.warning + '20', color: colors.warning}}>
+                <FaExclamationTriangle />
+              </div>
+              <h3 style={styles.confirmTitle}>¿Cancelar pedido?</h3>
+            </div>
+            <p style={styles.confirmText}>
+              ¿Estás seguro de que deseas cancelar el pedido 
+              <strong> #{pedidoSeleccionado?.numero_pedido || pedidoSeleccionado?.id}</strong>?
+            </p>
+            <div style={styles.confirmActions}>
+              <button 
+                onClick={() => {
+                  setShowCancelConfirm(false);
+                  toast.info('Cancelación cancelada');
+                }}
+                style={styles.confirmCancel}
+              >
+                <FaTimesCircle />
+                No, mantener
+              </button>
+              <button 
+                onClick={handleConfirmCancel}
+                style={{...styles.confirmDelete, backgroundColor: colors.warning}}
+              >
+                <FaTimesCircle />
+                Sí, cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación para eliminar */}
+      {showDeleteConfirm && (
+        <div style={styles.confirmOverlay}>
+          <div style={styles.confirmModal}>
+            <div style={styles.confirmHeader}>
+              <div style={{...styles.confirmIcon, backgroundColor: colors.danger + '20', color: colors.danger}}>
+                <FaExclamationTriangle />
+              </div>
+              <h3 style={styles.confirmTitle}>¿Eliminar pedido?</h3>
+            </div>
+            <p style={styles.confirmText}>
+              ¿Estás seguro de que deseas eliminar permanentemente el pedido 
+              <strong> #{pedidoSeleccionado?.numero_pedido || pedidoSeleccionado?.id}</strong>?
+              <br />
+              <span style={{color: colors.danger, fontWeight: 'bold'}}>
+                Esta acción no se puede deshacer.
+              </span>
+            </p>
+            <div style={styles.confirmActions}>
+              <button 
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  toast.info('Eliminación cancelada');
+                }}
+                style={styles.confirmCancel}
+              >
+                <FaTimesCircle />
+                Cancelar
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                style={styles.confirmDelete}
+              >
+                <FaTimesCircle />
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
@@ -500,6 +706,7 @@ const PedidosPage = () => {
             <div style={styles.statContent}>
               <span style={styles.statCount}>{stats.pendientes}</span>
               <span style={styles.statName}>Pendientes</span>
+              <span style={styles.statSub}>${stats.ventasPendientes.toFixed(2)}</span>
             </div>
           </div>
           
@@ -510,6 +717,7 @@ const PedidosPage = () => {
             <div style={styles.statContent}>
               <span style={styles.statCount}>{stats.enPreparacion}</span>
               <span style={styles.statName}>En Preparación</span>
+              <span style={styles.statSub}>En proceso</span>
             </div>
           </div>
           
@@ -520,6 +728,7 @@ const PedidosPage = () => {
             <div style={styles.statContent}>
               <span style={styles.statCount}>{stats.listos}</span>
               <span style={styles.statName}>Listos</span>
+              <span style={styles.statSub}>Para entregar</span>
             </div>
           </div>
           
@@ -530,6 +739,7 @@ const PedidosPage = () => {
             <div style={styles.statContent}>
               <span style={styles.statCount}>{stats.entregados}</span>
               <span style={styles.statName}>Entregados</span>
+              <span style={styles.statSub}>${stats.ventasEntregados.toFixed(2)}</span>
             </div>
           </div>
           
@@ -540,6 +750,7 @@ const PedidosPage = () => {
             <div style={styles.statContent}>
               <span style={styles.statCount}>{stats.cancelados}</span>
               <span style={styles.statName}>Cancelados</span>
+              <span style={styles.statSub}>No facturado</span>
             </div>
           </div>
           
@@ -550,6 +761,7 @@ const PedidosPage = () => {
             <div style={styles.statContent}>
               <span style={styles.statCount}>${stats.totalVentas.toFixed(2)}</span>
               <span style={styles.statName}>Ventas Totales</span>
+              <span style={styles.statSub}>Acumulado</span>
             </div>
           </div>
         </div>
@@ -560,11 +772,22 @@ const PedidosPage = () => {
         <div style={styles.filtersHeader}>
           <h3 style={styles.filtersTitle}>
             <FaFilter style={styles.filtersIcon} />
-            Filtros
+            Filtros y Búsqueda
           </h3>
-          <span style={styles.resultsCount}>
-            {pedidosFiltrados.length} de {pedidos.length} pedidos
-          </span>
+          <div style={styles.resultsSection}>
+            <span style={styles.resultsCount}>
+              {pedidosFiltrados.length} de {pedidos.length} pedidos
+            </span>
+            <button
+              onClick={handleRefresh}
+              style={styles.refreshButton}
+              disabled={refreshing}
+              title="Actualizar pedidos"
+            >
+              <FaSync style={refreshing ? {animation: 'spin 1s linear infinite'} : {}} />
+              <span>Actualizar</span>
+            </button>
+          </div>
         </div>
         
         <div style={styles.filtersContent}>
@@ -572,83 +795,126 @@ const PedidosPage = () => {
             <FaSearch style={styles.searchIcon} />
             <input
               type="text"
-              placeholder="Buscar por número, cliente o mesa..."
+              placeholder="Buscar por número, cliente, teléfono o mesa..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={styles.searchInput}
             />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                style={styles.clearSearchButton}
+                title="Limpiar búsqueda"
+              >
+                <FaTimesCircle />
+              </button>
+            )}
           </div>
           
-          <div style={styles.statusFilters}>
-            <button
-              onClick={() => setFiltroEstado('todos')}
-              style={{
-                ...styles.statusButton,
-                ...(filtroEstado === 'todos' ? styles.statusButtonActive : {})
-              }}
-            >
-              Todos
-            </button>
+          <div style={styles.filtersRow}>
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Filtrar por Estado</label>
+              <div style={styles.statusFilters}>
+                <button
+                  onClick={() => setFiltroEstado('todos')}
+                  style={{
+                    ...styles.statusButton,
+                    ...(filtroEstado === 'todos' ? styles.statusButtonActive : {})
+                  }}
+                >
+                  Todos ({stats.total})
+                </button>
+                
+                <button
+                  onClick={() => setFiltroEstado('pendiente')}
+                  style={{
+                    ...styles.statusButton,
+                    ...(filtroEstado === 'pendiente' ? styles.statusButtonActive : {}),
+                    backgroundColor: filtroEstado === 'pendiente' ? '#fef3c7' : colors.background,
+                    borderColor: '#f59e0b',
+                    color: filtroEstado === 'pendiente' ? '#92400e' : colors.text.secondary
+                  }}
+                >
+                  Pendientes ({stats.pendientes})
+                </button>
+                
+                <button
+                  onClick={() => setFiltroEstado('en_preparacion')}
+                  style={{
+                    ...styles.statusButton,
+                    ...(filtroEstado === 'en_preparacion' ? styles.statusButtonActive : {}),
+                    backgroundColor: filtroEstado === 'en_preparacion' ? '#dbeafe' : colors.background,
+                    borderColor: '#3b82f6',
+                    color: filtroEstado === 'en_preparacion' ? '#1e40af' : colors.text.secondary
+                  }}
+                >
+                  En Prep. ({stats.enPreparacion})
+                </button>
+                
+                <button
+                  onClick={() => setFiltroEstado('listo')}
+                  style={{
+                    ...styles.statusButton,
+                    ...(filtroEstado === 'listo' ? styles.statusButtonActive : {}),
+                    backgroundColor: filtroEstado === 'listo' ? '#d1fae5' : colors.background,
+                    borderColor: '#10b981',
+                    color: filtroEstado === 'listo' ? '#065f46' : colors.text.secondary
+                  }}
+                >
+                  Listos ({stats.listos})
+                </button>
+                
+                <button
+                  onClick={() => setFiltroEstado('entregado')}
+                  style={{
+                    ...styles.statusButton,
+                    ...(filtroEstado === 'entregado' ? styles.statusButtonActive : {}),
+                    backgroundColor: filtroEstado === 'entregado' ? '#f3f4f6' : colors.background,
+                    borderColor: '#6b7280',
+                    color: filtroEstado === 'entregado' ? '#374151' : colors.text.secondary
+                  }}
+                >
+                  Entregados ({stats.entregados})
+                </button>
+                
+                <button
+                  onClick={() => setFiltroEstado('cancelado')}
+                  style={{
+                    ...styles.statusButton,
+                    ...(filtroEstado === 'cancelado' ? styles.statusButtonActive : {}),
+                    backgroundColor: filtroEstado === 'cancelado' ? '#fee2e2' : colors.background,
+                    borderColor: '#dc2626',
+                    color: filtroEstado === 'cancelado' ? '#991b1b' : colors.text.secondary
+                  }}
+                >
+                  Cancelados ({stats.cancelados})
+                </button>
+              </div>
+            </div>
             
-            <button
-              onClick={() => setFiltroEstado('pendiente')}
-              style={{
-                ...styles.statusButton,
-                ...(filtroEstado === 'pendiente' ? styles.statusButtonActive : {}),
-                backgroundColor: filtroEstado === 'pendiente' ? '#fef3c7' : '#ffffff',
-                borderColor: '#f59e0b'
-              }}
-            >
-              Pendientes
-            </button>
-            
-            <button
-              onClick={() => setFiltroEstado('en_preparacion')}
-              style={{
-                ...styles.statusButton,
-                ...(filtroEstado === 'en_preparacion' ? styles.statusButtonActive : {}),
-                backgroundColor: filtroEstado === 'en_preparacion' ? '#dbeafe' : '#ffffff',
-                borderColor: '#3b82f6'
-              }}
-            >
-              En Preparación
-            </button>
-            
-            <button
-              onClick={() => setFiltroEstado('listo')}
-              style={{
-                ...styles.statusButton,
-                ...(filtroEstado === 'listo' ? styles.statusButtonActive : {}),
-                backgroundColor: filtroEstado === 'listo' ? '#d1fae5' : '#ffffff',
-                borderColor: '#10b981'
-              }}
-            >
-              Listos
-            </button>
-            
-            <button
-              onClick={() => setFiltroEstado('entregado')}
-              style={{
-                ...styles.statusButton,
-                ...(filtroEstado === 'entregado' ? styles.statusButtonActive : {}),
-                backgroundColor: filtroEstado === 'entregado' ? '#f3f4f6' : '#ffffff',
-                borderColor: '#6b7280'
-              }}
-            >
-              Entregados
-            </button>
-            
-            <button
-              onClick={() => setFiltroEstado('cancelado')}
-              style={{
-                ...styles.statusButton,
-                ...(filtroEstado === 'cancelado' ? styles.statusButtonActive : {}),
-                backgroundColor: filtroEstado === 'cancelado' ? '#fee2e2' : '#ffffff',
-                borderColor: '#dc2626'
-              }}
-            >
-              Cancelados
-            </button>
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Acciones</label>
+              <div style={styles.actionsGroup}>
+                <button
+                  onClick={clearFilters}
+                  style={styles.actionButton}
+                  disabled={!searchTerm && filtroEstado === 'todos'}
+                  title="Limpiar todos los filtros"
+                >
+                  <FaTimesCircle />
+                  <span>Limpiar Filtros</span>
+                </button>
+                <button
+                  onClick={() => handleImprimirPDF(pedidosFiltrados[0])}
+                  style={styles.printButton}
+                  disabled={pedidosFiltrados.length === 0}
+                  title="Imprimir reporte"
+                >
+                  <FaPrint />
+                  <span>Reporte</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -674,15 +940,21 @@ const PedidosPage = () => {
             </p>
             {(searchTerm || filtroEstado !== 'todos') && (
               <button
-                onClick={() => {
-                  setSearchTerm('');
-                  setFiltroEstado('todos');
-                }}
+                onClick={clearFilters}
                 style={styles.clearFiltersButton}
               >
                 Limpiar filtros
               </button>
             )}
+            <div style={styles.emptyActions}>
+              <button
+                onClick={handleRefresh}
+                style={styles.refreshButton}
+              >
+                <FaSync />
+                Actualizar
+              </button>
+            </div>
           </div>
         ) : (
           <div style={styles.pedidosGrid}>
@@ -692,9 +964,9 @@ const PedidosPage = () => {
                 pedido={pedido}
                 onVerDetalle={handleVerDetalle}
                 onCambiarEstado={handleCambiarEstado}
-                onCancelar={handleCancelar}
+                onCancelar={handleCancelarClick}
                 onImprimirPDF={handleImprimirPDF}
-                onEliminar={handleEliminar}
+                onEliminar={handleEliminarClick}
               />
             ))}
           </div>
@@ -709,6 +981,8 @@ const PedidosPage = () => {
           onClose={handleCerrarDetalle}
           loading={cargandoDetalle}
           onImprimirPDF={handleImprimirPDF}
+          onCancelar={handleCancelarClick}
+          onCambiarEstado={handleCambiarEstado}
         />
       )}
 
@@ -747,7 +1021,8 @@ const styles = {
   container: {
     padding: '32px',
     backgroundColor: colors.background,
-    minHeight: '100vh'
+    minHeight: '100vh',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   
   // Header
@@ -773,7 +1048,8 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: '12px',
-    fontSize: '28px'
+    fontSize: '28px',
+    boxShadow: '0 4px 12px rgba(44, 90, 160, 0.2)'
   },
   title: {
     fontSize: '32px',
@@ -801,7 +1077,8 @@ const styles = {
   statLabel: {
     fontSize: '14px',
     color: colors.text.secondary,
-    marginBottom: '4px'
+    marginBottom: '4px',
+    fontWeight: '600'
   },
   statValue: {
     fontSize: '24px',
@@ -826,7 +1103,9 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '16px',
-    transition: 'all 0.2s ease'
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    cursor: 'pointer'
   },
   statIcon: {
     width: '48px',
@@ -852,7 +1131,13 @@ const styles = {
   statName: {
     fontSize: '14px',
     color: colors.text.secondary,
-    fontWeight: '600'
+    fontWeight: '600',
+    marginBottom: '4px'
+  },
+  statSub: {
+    fontSize: '12px',
+    color: colors.text.light,
+    fontWeight: '500'
   },
   
   // Filtros
@@ -861,13 +1146,15 @@ const styles = {
     borderRadius: '12px',
     padding: '24px',
     marginBottom: '32px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+    boxShadow: '0 2px 12px rgba(0,0,0,0.1)'
   },
   filtersHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px'
+    marginBottom: '20px',
+    flexWrap: 'wrap',
+    gap: '16px'
   },
   filtersTitle: {
     fontSize: '18px',
@@ -881,13 +1168,32 @@ const styles = {
   filtersIcon: {
     color: colors.primary
   },
+  resultsSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px'
+  },
   resultsCount: {
     backgroundColor: colors.primary + '20',
     color: colors.primary,
-    padding: '6px 16px',
+    padding: '8px 16px',
     borderRadius: '20px',
     fontSize: '14px',
     fontWeight: '600'
+  },
+  refreshButton: {
+    backgroundColor: colors.primary,
+    color: '#ffffff',
+    border: 'none',
+    padding: '8px 16px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
   },
   filtersContent: {
     display: 'flex',
@@ -908,7 +1214,7 @@ const styles = {
   },
   searchInput: {
     width: '100%',
-    padding: '12px 16px 12px 48px',
+    padding: '14px 16px 14px 48px',
     border: `2px solid ${colors.border}`,
     borderRadius: '10px',
     fontSize: '15px',
@@ -916,31 +1222,93 @@ const styles = {
     transition: 'all 0.2s ease',
     backgroundColor: colors.card,
     color: colors.text.primary,
-    '&:focus': {
-      outline: 'none',
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primary}20`
-    }
+    outline: 'none'
+  },
+  clearSearchButton: {
+    position: 'absolute',
+    right: '16px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: colors.text.light,
+    cursor: 'pointer',
+    fontSize: '16px',
+    padding: '4px'
+  },
+  filtersRow: {
+    display: 'flex',
+    gap: '24px',
+    flexWrap: 'wrap'
+  },
+  filterGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    flex: 1,
+    minWidth: '300px'
+  },
+  filterLabel: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: colors.text.primary
   },
   statusFilters: {
     display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap'
+    flexWrap: 'wrap',
+    gap: '8px'
   },
   statusButton: {
-    padding: '10px 20px',
+    padding: '10px 16px',
     border: `2px solid`,
     borderRadius: '8px',
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    backgroundColor: colors.card,
-    color: colors.text.primary
+    backgroundColor: colors.background,
+    color: colors.text.secondary,
+    flex: 1,
+    minWidth: '120px',
+    textAlign: 'center'
   },
   statusButtonActive: {
     transform: 'translateY(-2px)',
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+  },
+  actionsGroup: {
+    display: 'flex',
+    gap: '12px'
+  },
+  actionButton: {
+    backgroundColor: colors.background,
+    border: `2px solid ${colors.border}`,
+    color: colors.text.secondary,
+    padding: '10px 16px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+    flex: 1
+  },
+  printButton: {
+    backgroundColor: colors.info,
+    color: '#ffffff',
+    border: 'none',
+    padding: '10px 16px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease',
+    flex: 1
   },
   
   // Pedidos Container
@@ -959,7 +1327,8 @@ const styles = {
     borderRadius: '12px',
     padding: '60px 32px',
     textAlign: 'center',
-    border: `2px dashed ${colors.border}`
+    border: `2px dashed ${colors.border}`,
+    boxShadow: '0 2px 12px rgba(0,0,0,0.05)'
   },
   emptyIcon: {
     fontSize: '64px',
@@ -982,19 +1351,114 @@ const styles = {
     marginLeft: 'auto',
     marginRight: 'auto'
   },
+  emptyActions: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '12px',
+    marginTop: '20px'
+  },
   clearFiltersButton: {
     backgroundColor: colors.primary,
     color: '#ffffff',
     border: 'none',
-    padding: '10px 20px',
+    padding: '12px 24px',
     borderRadius: '8px',
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    '&:hover': {
-      backgroundColor: colors.primaryLight
-    }
+    margin: '0 8px'
+  },
+  
+  // Modal de confirmación
+  confirmOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    backdropFilter: 'blur(4px)',
+    animation: 'fadeIn 0.2s ease-out'
+  },
+  confirmModal: {
+    backgroundColor: colors.card,
+    borderRadius: '16px',
+    padding: '32px',
+    maxWidth: '480px',
+    width: '90%',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    animation: 'modalSlideIn 0.3s ease-out'
+  },
+  confirmHeader: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '16px',
+    marginBottom: '24px'
+  },
+  confirmIcon: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '32px'
+  },
+  confirmTitle: {
+    fontSize: '22px',
+    fontWeight: '700',
+    color: colors.text.primary,
+    margin: 0,
+    textAlign: 'center'
+  },
+  confirmText: {
+    fontSize: '16px',
+    color: colors.text.secondary,
+    lineHeight: '1.6',
+    marginBottom: '32px',
+    textAlign: 'center'
+  },
+  confirmActions: {
+    display: 'flex',
+    gap: '12px'
+  },
+  confirmCancel: {
+    flex: 1,
+    backgroundColor: colors.background,
+    border: `2px solid ${colors.border}`,
+    color: colors.text.primary,
+    padding: '14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
+  },
+  confirmDelete: {
+    flex: 1,
+    backgroundColor: colors.danger,
+    color: '#ffffff',
+    border: 'none',
+    padding: '14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
   },
   
   // Loading States
@@ -1056,7 +1520,8 @@ const styles = {
   },
   errorIcon: {
     fontSize: '64px',
-    color: colors.danger
+    color: colors.danger,
+    marginBottom: '16px'
   },
   errorTitle: {
     fontSize: '24px',
@@ -1068,7 +1533,8 @@ const styles = {
     fontSize: '16px',
     color: colors.text.secondary,
     margin: '0 0 24px 0',
-    maxWidth: '400px'
+    maxWidth: '400px',
+    lineHeight: '1.6'
   },
   retryButton: {
     backgroundColor: colors.primary,
@@ -1080,19 +1546,39 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    '&:hover': {
-      backgroundColor: colors.primaryLight
-    }
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
   }
 };
 
-// Inyectar animaciones
+// Inyectar animaciones CSS
 if (typeof document !== 'undefined') {
   const styleSheet = document.createElement('style');
   styleSheet.textContent = `
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
     
     *::-webkit-scrollbar {
@@ -1114,14 +1600,19 @@ if (typeof document !== 'undefined') {
       background: #a8a8a8;
     }
     
-    button:hover {
-      transform: translateY(-1px);
-      opacity: 0.9;
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
     
     button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
+    }
+    
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.15);
     }
   `;
   document.head.appendChild(styleSheet);

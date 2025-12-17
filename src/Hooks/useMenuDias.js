@@ -120,7 +120,7 @@ const crearMenu = async (menuData) => {
     };
 
     console.log('📤 menuParaEnviar (SIN productos):', menuParaEnviar);
-    console.log('🌐 URL:', 'http://localhost:3000/api/Menu_Dias');
+    console.log('🌐 URL:', 'https://backend-al-punto-1.onrender.com/api/Menu_Dias');
     
     // PRIMERO: Crear solo el menú
     const response = await menuDiasService.create(menuParaEnviar);
@@ -291,7 +291,7 @@ const agregarProductosMenu = async (menuId, productos) => {
     });
 
     console.log('📤 productosParaEnviar:', JSON.stringify(productosParaEnviar, null, 2));
-    console.log('🌐 URL:', `http://localhost:3000/api/Menu_dias_Productos/menu-dias/${menuId}/productos/multiples`);
+    console.log('🌐 URL:', `https://backend-al-punto-1.onrender.com/api/Menu_dias_Productos/menu-dias/${menuId}/productos/multiples`);
     console.log('📤 Body completo:', JSON.stringify({ productos: productosParaEnviar }, null, 2));
 
     const response = await menuDiasProductosService.agregarMultiples(menuId, productosParaEnviar);

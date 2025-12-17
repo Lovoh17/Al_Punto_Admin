@@ -447,7 +447,7 @@ const PedidoDetalleModal = ({ pedido, onClose, productos, loading }) => {
               <div class="logo-section">
                 <div class="logo-placeholder">
                   <!-- Reemplaza con tu logo -->
-                  <img src="../../assets/Images/Logos/Ral Hrm - 2025-12-01 01.56.23.svg" style="width:80px;height:80px;" alt="Logo Restaurante">
+                  <img src="/src/assets/Images/Logos/logo.svg" style="width:80px;height:80px;" alt="Logo Restaurante">
                 </div>
                 <div class="restaurant-info">
                   <h1 class="restaurant-name">RESTAURANTE AL PUNTO</h1>

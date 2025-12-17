@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useProductos } from '../Hooks/useProductos';
 import ProductCard from '../components/Productos/ProductCard';
 import ProductoModal from '../components/Productos/ProductoModal';
+import { ToastContainer, useToast } from '../components/Toast/Toast';
 import { 
   FaUtensils, 
   FaFilter, 
@@ -32,12 +33,23 @@ const ProductosPage = () => {
     refetchCategorias
   } = useProductos();
 
+  const toast = useToast();
+
   const [showModal, setShowModal] = useState(false);
   const [editingProducto, setEditingProducto] = useState(null);
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
   const [filtroDisponible, setFiltroDisponible] = useState('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshingCategorias, setRefreshingCategorias] = useState(false);
+
+  // Modal de confirmación
+  const [confirmModal, setConfirmModal] = useState({
+    show: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    type: 'danger'
+  });
 
   // Refrescar categorías periódicamente
   useEffect(() => {
@@ -48,10 +60,31 @@ const ProductosPage = () => {
     return () => clearInterval(interval);
   }, [refetchCategorias]);
 
+  const showConfirmDialog = (title, message, onConfirm, type = 'danger') => {
+    setConfirmModal({
+      show: true,
+      title,
+      message,
+      onConfirm,
+      type
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmModal({
+      show: false,
+      title: '',
+      message: '',
+      onConfirm: null,
+      type: 'danger'
+    });
+  };
+
   const handleRefreshCategorias = async () => {
     setRefreshingCategorias(true);
     await refetchCategorias();
     setRefreshingCategorias(false);
+    toast.success('Categorías actualizadas correctamente');
   };
 
   const handleCrearProducto = () => {
@@ -65,31 +98,39 @@ const ProductosPage = () => {
   };
 
   const handleEliminarProducto = async (id, productoNombre) => {
-    if (window.confirm(`¿Estás seguro de eliminar el producto "${productoNombre}"?`)) {
-      const result = await eliminarProducto(id);
-      if (result.success) {
-        alert('✅ Producto eliminado');
-      } else {
-        alert(`❌ ${result.error}`);
-      }
-    }
+    showConfirmDialog(
+      'Confirmar eliminación',
+      `¿Estás seguro de que deseas eliminar el producto "${productoNombre}"? Esta acción no se puede deshacer.`,
+      async () => {
+        const result = await eliminarProducto(id);
+        if (result.success) {
+          toast.success('Producto eliminado correctamente');
+        } else {
+          toast.error(result.error || 'Error al eliminar el producto');
+        }
+        closeConfirmDialog();
+      },
+      'danger'
+    );
   };
 
   const handleToggleDisponibilidad = async (id, disponible, productoNombre) => {
-    const confirmacion = window.confirm(
+    showConfirmDialog(
+      disponible ? 'Activar producto' : 'Desactivar producto',
       disponible 
-        ? `¿Activar el producto "${productoNombre}"?`
-        : `¿Desactivar el producto "${productoNombre}"?`
+        ? `¿Deseas activar el producto "${productoNombre}"?`
+        : `¿Deseas desactivar el producto "${productoNombre}"?`,
+      async () => {
+        const result = await toggleDisponibilidad(id, disponible);
+        if (result.success) {
+          toast.success(`Producto ${disponible ? 'activado' : 'desactivado'} correctamente`);
+        } else {
+          toast.error(result.error || 'Error al cambiar la disponibilidad');
+        }
+        closeConfirmDialog();
+      },
+      disponible ? 'success' : 'warning'
     );
-    
-    if (!confirmacion) return;
-    
-    const result = await toggleDisponibilidad(id, disponible);
-    if (result.success) {
-      alert(`✅ Producto ${disponible ? 'activado' : 'desactivado'}`);
-    } else {
-      alert(`❌ ${result.error}`);
-    }
   };
 
   const handleSaveProducto = async (productoData) => {
@@ -100,11 +141,11 @@ const ProductosPage = () => {
       : await crearProducto(productoData);
 
     if (result.success) {
-      alert(`✅ Producto ${isEditing ? 'actualizado' : 'creado'} correctamente`);
+      toast.success(`Producto ${isEditing ? 'actualizado' : 'creado'} correctamente`);
       setShowModal(false);
       setEditingProducto(null);
     } else {
-      alert(`❌ ${result.error}`);
+      toast.error(result.error || `Error al ${isEditing ? 'actualizar' : 'crear'} el producto`);
     }
   };
 
@@ -204,6 +245,20 @@ const ProductosPage = () => {
 
   return (
     <div style={styles.container}>
+      {/* Sistema de notificaciones Toast */}
+      <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
+
+      {/* Modal de confirmación */}
+      {confirmModal.show && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          type={confirmModal.type}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={closeConfirmDialog}
+        />
+      )}
+
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
@@ -535,6 +590,153 @@ const ProductosPage = () => {
   );
 };
 
+// Componente Modal de Confirmación
+const ConfirmModal = ({ title, message, type, onConfirm, onCancel }) => {
+  const getTypeStyles = () => {
+    switch (type) {
+      case 'danger':
+        return {
+          color: '#ef4444',
+          buttonBg: '#ef4444',
+          buttonHover: '#dc2626'
+        };
+      case 'warning':
+        return {
+          color: '#f59e0b',
+          buttonBg: '#f59e0b',
+          buttonHover: '#d97706'
+        };
+      case 'success':
+        return {
+          color: '#10b981',
+          buttonBg: '#10b981',
+          buttonHover: '#059669'
+        };
+      default:
+        return {
+          color: '#3b82f6',
+          buttonBg: '#3b82f6',
+          buttonHover: '#2563eb'
+        };
+    }
+  };
+
+  const typeStyles = getTypeStyles();
+
+  return (
+    <div style={confirmStyles.overlay} onClick={onCancel}>
+      <div style={confirmStyles.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={confirmStyles.header}>
+          <div style={{...confirmStyles.iconContainer, backgroundColor: typeStyles.color + '20'}}>
+            <FaExclamationTriangle style={{color: typeStyles.color, fontSize: '32px'}} />
+          </div>
+          <h3 style={confirmStyles.title}>{title}</h3>
+        </div>
+        <p style={confirmStyles.message}>{message}</p>
+        <div style={confirmStyles.actions}>
+          <button
+            onClick={onCancel}
+            style={confirmStyles.cancelButton}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              ...confirmStyles.confirmButton,
+              backgroundColor: typeStyles.buttonBg
+            }}
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const confirmStyles = {
+  overlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10000,
+    backdropFilter: 'blur(4px)'
+  },
+  modal: {
+    backgroundColor: '#ffffff',
+    borderRadius: '16px',
+    padding: '32px',
+    maxWidth: '480px',
+    width: '90%',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    animation: 'modalSlideIn 0.2s ease-out'
+  },
+  header: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '16px',
+    marginBottom: '24px'
+  },
+  iconContainer: {
+    width: '80px',
+    height: '80px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  title: {
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#111827',
+    margin: 0,
+    textAlign: 'center'
+  },
+  message: {
+    fontSize: '16px',
+    color: '#6b7280',
+    lineHeight: '1.6',
+    marginBottom: '32px',
+    textAlign: 'center'
+  },
+  actions: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end'
+  },
+  cancelButton: {
+    padding: '12px 24px',
+    borderRadius: '8px',
+    border: '2px solid #e5e7eb',
+    backgroundColor: '#ffffff',
+    color: '#6b7280',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    flex: 1
+  },
+  confirmButton: {
+    padding: '12px 24px',
+    borderRadius: '8px',
+    border: 'none',
+    color: '#ffffff',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    flex: 1
+  }
+};
+
 const colors = {
   primary: '#2c5aa0',
   primaryLight: '#3a6bc5',
@@ -725,12 +927,7 @@ const styles = {
     fontFamily: 'inherit',
     transition: 'all 0.2s ease',
     backgroundColor: colors.card,
-    color: colors.text.primary,
-    '&:focus': {
-      outline: 'none',
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primary}20`
-    }
+    color: colors.text.primary
   },
   filtersRow: {
     display: 'flex',
@@ -759,11 +956,7 @@ const styles = {
     backgroundColor: colors.card,
     color: colors.text.primary,
     cursor: 'pointer',
-    outline: 'none',
-    '&:focus': {
-      borderColor: colors.primary,
-      boxShadow: `0 0 0 3px ${colors.primary}20`
-    }
+    outline: 'none'
   },
   filterHint: {
     fontSize: '12px',
@@ -787,15 +980,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     transition: 'all 0.2s ease',
-    flex: 1,
-    '&:hover:not(:disabled)': {
-      backgroundColor: colors.text.secondary,
-      color: '#ffffff'
-    },
-    '&:disabled': {
-      opacity: 0.5,
-      cursor: 'not-allowed'
-    }
+    flex: 1
   },
   createButton: {
     backgroundColor: colors.primary,
@@ -810,11 +995,7 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     transition: 'all 0.2s ease',
-    flex: 1,
-    '&:hover': {
-      backgroundColor: colors.primaryLight,
-      transform: 'translateY(-1px)'
-    }
+    flex: 1
   },
   
   // Categorías
@@ -856,15 +1037,7 @@ const styles = {
     justifyContent: 'center',
     width: '40px',
     height: '40px',
-    transition: 'all 0.2s ease',
-    '&:hover:not(:disabled)': {
-      backgroundColor: colors.border,
-      color: colors.text.primary
-    },
-    '&:disabled': {
-      opacity: 0.5,
-      cursor: 'not-allowed'
-    }
+    transition: 'all 0.2s ease'
   },
   categoriasGrid: {
     display: 'grid',
@@ -1006,10 +1179,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    '&:hover': {
-      backgroundColor: colors.primaryLight
-    }
+    transition: 'all 0.2s ease'
   },
   
   // Loading States
@@ -1075,10 +1245,7 @@ const styles = {
     transition: 'all 0.2s ease',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
-    '&:hover': {
-      backgroundColor: colors.primaryLight
-    }
+    gap: '8px'
   }
 };
 
@@ -1089,6 +1256,17 @@ if (typeof document !== 'undefined') {
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
+    }
+    
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
     
     *::-webkit-scrollbar {
@@ -1117,14 +1295,6 @@ if (typeof document !== 'undefined') {
     .categoria-card:hover {
       transform: translateY(-2px);
       box-shadow: 0 8px 16px rgba(0,0,0,0.1);
-    }
-    
-    .action-button:hover {
-      transform: translateY(-1px);
-    }
-    
-    .create-button:hover {
-      transform: translateY(-1px);
     }
   `;
   document.head.appendChild(styleSheet);

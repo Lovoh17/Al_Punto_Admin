@@ -1,6 +1,6 @@
 // src/hooks/useCategorias.js
 import { useState, useEffect } from 'react';
-import { categoriaService } from '../services/api';
+import { categoriaService } from './api';
 
 export const useCategorias = () => {
   const [categorias, setCategorias] = useState([]);

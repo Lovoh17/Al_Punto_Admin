@@ -9,6 +9,7 @@ import MenuDiasPage from './pages/MenuDiasPage'
 import ProductosPage from './pages/ProductosPage';
 import UsuariosPage from './pages/GestionUsuarios';
 import PedidosPage from './pages/PedidosPage';
+import CategoriasPage from './pages/CategoriasPage';
 import Login from './components/Login';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
               <Route path="/admin/dashboard" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/productos" element={<ProductosPage />} />
+              <Route path="/categorias" element={<CategoriasPage />} />
               <Route path="/Menu-Dias" element={<MenuDiasPage />} />
               <Route path="/Usuarios" element={<UsuariosPage />} />
               <Route path="/pedidos" element={<PedidosPage />} />

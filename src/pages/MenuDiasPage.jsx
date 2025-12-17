@@ -1,11 +1,13 @@
-// src/pages/MenuDiasPage.jsx (CORREGIDO)
-import React, { useState, useEffect } from 'react';
+// src/pages/MenuDiasPage.jsx (CON SISTEMA DE NOTIFICACIONES COMPLETO)
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMenuDias } from '../hooks/useMenuDias';
 import ModalMenu from '../components/MenuDias/MenuDiasModal';
+import { ToastContainer, useToast } from '../components/Toast/Toast';
 import { 
   FaCalendarAlt, FaPlus, FaUtensils, FaCalendarDay, 
   FaCalendarWeek, FaChartBar, FaExclamationTriangle, 
-  FaEdit, FaCopy, FaTrash, FaFilter 
+  FaEdit, FaCopy, FaTrash, FaFilter, FaSearch,
+  FaTimes, FaCheck, FaInfoCircle
 } from 'react-icons/fa';
 
 const MenuDiasPage = () => {
@@ -20,6 +22,8 @@ const MenuDiasPage = () => {
     getProductosMenu,
     copiarMenu
   } = useMenuDias();
+
+  const toast = useToast();
 
   const [viewMode, setViewMode] = useState('todos');
   const [selectedMenu, setSelectedMenu] = useState(null);
@@ -42,41 +46,53 @@ const MenuDiasPage = () => {
 
   const loadProductosMenu = async (menuId) => {
     setLoadingProductos(true);
-    const result = await getProductosMenu(menuId);
-    if (result.success) {
-      setMenuProductos(Array.isArray(result.data) ? result.data : []);
-    } else {
-      alert(`Error al cargar productos: ${result.error}`);
+    try {
+      const result = await getProductosMenu(menuId);
+      if (result.success) {
+        setMenuProductos(Array.isArray(result.data) ? result.data : []);
+      } else {
+        toast.error(`Error al cargar productos: ${result.error}`);
+        setMenuProductos([]);
+      }
+    } catch (error) {
+      toast.error(error+'Error al cargar productos del menú');
       setMenuProductos([]);
+    } finally {
+      setLoadingProductos(false);
     }
-    setLoadingProductos(false);
   };
 
-  // CORREGIDO: Cargar productos antes de abrir modal de edición
   const handleOpenModal = async (menu = null) => {
     if (menu) {
       setLoadingProductos(true);
-      const result = await getProductosMenu(menu.id);
-      
-      if (result.success) {
-        const productosFormateados = result.data.map(p => ({
-          id: p.producto_id,
-          nombre: p.producto_info?.nombre,
-          precio: p.producto_info?.precio,
-          disponible: p.disponible !== false,
-          precio_especial: p.precio_especial,
-          imagen: p.producto_info?.imagen,
-          descripcion: p.producto_info?.descripcion,
-          categoria_id: p.producto_info?.categoria_id,
-          categoria_nombre: p.producto_info?.categoria_nombre
-        }));
+      try {
+        const result = await getProductosMenu(menu.id);
         
-        setMenuToEdit({ 
-          ...menu, 
-          productos: productosFormateados 
-        });
-      } else {
+        if (result.success) {
+          const productosFormateados = result.data.map(p => ({
+            id: p.producto_id,
+            nombre: p.producto_info?.nombre,
+            precio: p.producto_info?.precio,
+            disponible: p.disponible !== false,
+            precio_especial: p.precio_especial,
+            imagen: p.producto_info?.imagen,
+            descripcion: p.producto_info?.descripcion,
+            categoria_id: p.producto_info?.categoria_id,
+            categoria_nombre: p.producto_info?.categoria_nombre
+          }));
+          
+          setMenuToEdit({ 
+            ...menu, 
+            productos: productosFormateados 
+          });
+        } else {
+          setMenuToEdit(menu);
+          toast.warning('No se pudieron cargar todos los productos del menú');
+        }
+      } catch (error) {
+      console.log(error)
         setMenuToEdit(menu);
+        toast.error('Error al cargar productos del menú');
       }
       setLoadingProductos(false);
     } else {
@@ -93,24 +109,25 @@ const MenuDiasPage = () => {
   const handleSubmitMenu = async (menuData) => {
     try {
       let result;
+      const isEditing = !!menuToEdit;
       
-      if (menuToEdit) {
+      if (isEditing) {
         result = await actualizarMenu(menuToEdit.id, menuData);
         if (result.success) {
-          alert('✅ Menú actualizado exitosamente');
+          toast.success('✅ Menú actualizado exitosamente');
           if (selectedMenu?.id === menuToEdit.id) {
             await loadProductosMenu(menuToEdit.id);
           }
         } else {
-          alert(`❌ ${result.error}`);
+          toast.error(`❌ ${result.error || 'Error al actualizar el menú'}`);
           return;
         }
       } else {
         result = await crearMenu(menuData);
         if (result.success) {
-          alert('✅ Menú creado exitosamente');
+          toast.success('✅ Menú creado exitosamente');
         } else {
-          alert(`❌ ${result.error}`);
+          toast.error(`❌ ${result.error || 'Error al crear el menú'}`);
           return;
         }
       }
@@ -118,7 +135,7 @@ const MenuDiasPage = () => {
       handleCloseModal();
     } catch (error) {
       console.error('Error:', error);
-      alert('❌ Error al procesar el menú');
+      toast.error('❌ Error al procesar el menú');
     }
   };
 
@@ -129,72 +146,76 @@ const MenuDiasPage = () => {
 
   const handleConfirmDelete = async () => {
     if (menuToDelete) {
-      const result = await eliminarMenu(menuToDelete.id);
-      if (result.success) {
-        alert('✅ Menú eliminado exitosamente');
-        if (selectedMenu?.id === menuToDelete.id) {
-          setSelectedMenu(null);
+      try {
+        const result = await eliminarMenu(menuToDelete.id);
+        if (result.success) {
+          toast.success('✅ Menú eliminado exitosamente');
+          if (selectedMenu?.id === menuToDelete.id) {
+            setSelectedMenu(null);
+          }
+        } else {
+          toast.error(`❌ ${result.error || 'Error al eliminar el menú'}`);
         }
-      } else {
-        alert(`❌ ${result.error}`);
+      } catch (error) {
+      console.log(error)
+        toast.error('❌ Error al eliminar el menú');
       }
     }
     setShowDeleteConfirm(false);
     setMenuToDelete(null);
   };
 
-  // CORREGIDO: Validar fecha duplicada
   const handleCopyMenu = async (menu) => {
-    const nombreCopia = prompt('Ingrese el nombre para la copia:', `${menu.nombre} - Copia`);
-    if (!nombreCopia) return;
+    try {
+      const nombreCopia = prompt('Ingrese el nombre para la copia:', `${menu.nombre} - Copia`);
+      if (!nombreCopia) {
+        toast.info('Operación de copia cancelada');
+        return;
+      }
 
-    const fechaCopia = prompt('Ingrese la fecha para la copia (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
-    if (!fechaCopia) return;
+      const fechaCopia = prompt('Ingrese la fecha para la copia (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+      if (!fechaCopia) {
+        toast.info('Operación de copia cancelada');
+        return;
+      }
 
-    // Validar fecha duplicada
-    const menuExistente = menusArray.find(m => m.fecha === fechaCopia);
-    if (menuExistente) {
-      const confirmar = window.confirm(`⚠️ Ya existe un menú para la fecha ${fechaCopia}. ¿Desea continuar de todas formas?`);
-      if (!confirmar) return;
-    }
+      // Validar formato de fecha
+      if (!isValidDate(fechaCopia)) {
+        toast.error('Formato de fecha inválido. Use YYYY-MM-DD');
+        return;
+      }
 
-    const result = await copiarMenu(menu.id, {
-      nombre: nombreCopia,
-      fecha: fechaCopia
-    });
+      // Validar fecha duplicada
+      const menuExistente = menusArray.find(m => m.fecha === fechaCopia);
+      if (menuExistente) {
+        const confirmar = window.confirm(`⚠️ Ya existe un menú para la fecha ${fechaCopia}. ¿Desea continuar de todas formas?`);
+        if (!confirmar) {
+          toast.warning('Operación de copia cancelada');
+          return;
+        }
+      }
 
-    if (result.success) {
-      alert('✅ Menú copiado exitosamente');
-    } else {
-      alert(`❌ ${result.error}`);
+      const result = await copiarMenu(menu.id, {
+        nombre: nombreCopia,
+        fecha: fechaCopia
+      });
+
+      if (result.success) {
+        toast.success('✅ Menú copiado exitosamente');
+      } else {
+        toast.error(`❌ ${result.error || 'Error al copiar el menú'}`);
+      }
+    } catch (error) {
+      toast.error(error+ '❌ Error al copiar el menú');
     }
   };
 
-  const filtrarMenus = () => {
-    let menusFiltrados = menusArray;
-
-    switch(viewMode) {
-      case 'hoy':
-        menusFiltrados = menusFiltrados.filter(menu => esHoy(menu.fecha));
-        break;
-      case 'proximos':
-        menusFiltrados = menusFiltrados.filter(menu => esFuturo(menu.fecha));
-        break;
-    }
-
-    if (searchTerm) {
-      menusFiltrados = menusFiltrados.filter(menu => 
-        menu.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        menu.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (filterActivo !== 'todos') {
-      const activo = filterActivo === 'activos';
-      menusFiltrados = menusFiltrados.filter(menu => menu.activo === activo);
-    }
-
-    return menusFiltrados;
+  const isValidDate = (dateString) => {
+    const regex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!regex.test(dateString)) return false;
+    
+    const date = new Date(dateString);
+    return date instanceof Date && !isNaN(date);
   };
 
   const esHoy = (fechaString) => {
@@ -205,6 +226,7 @@ const MenuDiasPage = () => {
              fecha.getMonth() === hoy.getMonth() &&
              fecha.getDate() === hoy.getDate();
     } catch (error) {
+      console.log(error)
       return false;
     }
   };
@@ -217,6 +239,20 @@ const MenuDiasPage = () => {
       fecha.setHours(0, 0, 0, 0);
       return fecha > hoy;
     } catch (error) {
+      console.log(error)
+      return false;
+    }
+  };
+
+  const esPasado = (fechaString) => {
+    try {
+      const fecha = new Date(fechaString);
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      fecha.setHours(0, 0, 0, 0);
+      return fecha < hoy;
+    } catch (error) {
+      console.log(error)
       return false;
     }
   };
@@ -231,15 +267,66 @@ const MenuDiasPage = () => {
         day: 'numeric'
       });
     } catch (error) {
+        console.log(error);
       return fechaString;
     }
+  };
+
+  // Filtrar menús usando useMemo para optimización
+  const menusFiltrados = useMemo(() => {
+    let filtered = menusArray;
+
+    switch(viewMode) {
+      case 'hoy':
+        filtered = filtered.filter(menu => esHoy(menu.fecha));
+        break;
+      case 'proximos':
+        filtered = filtered.filter(menu => esFuturo(menu.fecha));
+        break;
+      case 'pasados':
+        filtered = filtered.filter(menu => esPasado(menu.fecha));
+        break;
+    }
+
+    if (searchTerm) {
+      filtered = filtered.filter(menu => 
+        menu.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        menu.descripcion?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    if (filterActivo !== 'todos') {
+      const activo = filterActivo === 'activos';
+      filtered = filtered.filter(menu => menu.activo === activo);
+    }
+
+    return filtered;
+  }, [menusArray, viewMode, searchTerm, filterActivo]);
+
+  // Calcular estadísticas
+  const stats = useMemo(() => {
+    const total = menusArray.length;
+    const activos = menusArray.filter(m => m.activo).length;
+    const hoy = menusArray.filter(m => esHoy(m.fecha)).length;
+    const futuros = menusArray.filter(m => esFuturo(m.fecha)).length;
+    const pasados = menusArray.filter(m => esPasado(m.fecha)).length;
+    
+    return { total, activos, hoy, futuros, pasados };
+  }, [menusArray]);
+
+  const clearFilters = () => {
+    setSearchTerm('');
+    setFilterActivo('todos');
+    setViewMode('todos');
+    toast.info('Filtros limpiados');
   };
 
   if (loading) {
     return (
       <div style={styles.loadingContainer}>
+        <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
         <div style={styles.spinner} />
-        <p style={styles.loadingText}>Cargando menús...</p>
+        <p style={styles.loadingText}>Cargando menús del día...</p>
       </div>
     );
   }
@@ -247,20 +334,24 @@ const MenuDiasPage = () => {
   if (error) {
     return (
       <div style={styles.errorContainer}>
+        <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
         <FaExclamationTriangle style={styles.errorIcon} />
-        <h3 style={styles.errorTitle}>Error al cargar</h3>
+        <h3 style={styles.errorTitle}>Error al cargar menús</h3>
         <p style={styles.errorText}>{error}</p>
         <button onClick={() => window.location.reload()} style={styles.retryButton}>
+          <FaTimes />
           Reintentar
         </button>
       </div>
     );
   }
 
-  const menusFiltrados = filtrarMenus();
-
   return (
     <div style={styles.container}>
+      {/* Sistema de notificaciones Toast */}
+      <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
+
+      {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerLeft}>
           <div style={styles.headerIcon}>
@@ -271,98 +362,221 @@ const MenuDiasPage = () => {
             <p style={styles.subtitle}>Gestiona y organiza los menús diarios del restaurante</p>
           </div>
         </div>
-        <button onClick={() => handleOpenModal()} style={styles.crearButton}>
-          <FaPlus />
-          Crear Nuevo Menú
-        </button>
+        <div style={styles.headerStats}>
+          <div style={styles.statItem}>
+            <span style={styles.statLabel}>Total Menús</span>
+            <span style={styles.statValue}>{stats.total}</span>
+          </div>
+          <div style={styles.statItem}>
+            <span style={styles.statLabel}>Activos</span>
+            <span style={styles.statValue}>{stats.activos}</span>
+          </div>
+        </div>
       </div>
 
-      <div style={styles.filtersContainer}>
-        <div style={styles.filters}>
-          <button 
-            onClick={() => {
-              setViewMode('todos');
-              setSelectedMenu(null);
-            }}
-            style={{
-              ...styles.filterButton,
-              ...(viewMode === 'todos' ? styles.filterButtonActive : {})
-            }}
-          >
-            <FaCalendarAlt />
-            <span>Todos los Menús</span>
-            <span style={styles.filterBadge}>{menusArray.length}</span>
-          </button>
+      {/* Estadísticas rápidas */}
+      <div style={styles.statsContainer}>
+        <div style={styles.statsGrid}>
+          <div style={styles.statCard}>
+            <div style={styles.statIcon}>
+              <FaCalendarAlt />
+            </div>
+            <div style={styles.statContent}>
+              <span style={styles.statCount}>{stats.total}</span>
+              <span style={styles.statName}>Total Menús</span>
+            </div>
+          </div>
           
-          <button 
-            onClick={() => {
-              setViewMode('hoy');
-              setSelectedMenu(null);
-            }}
-            style={{
-              ...styles.filterButton,
-              ...(viewMode === 'hoy' ? styles.filterButtonActive : {})
-            }}
-          >
-            <FaCalendarDay />
-            <span>Menú de Hoy</span>
-            <span style={styles.filterBadge}>
-              {menusArray.filter(m => esHoy(m.fecha)).length}
-            </span>
-          </button>
+          <div style={styles.statCard}>
+            <div style={styles.statIcon}>
+              <FaCalendarDay />
+            </div>
+            <div style={styles.statContent}>
+              <span style={styles.statCount}>{stats.hoy}</span>
+              <span style={styles.statName}>Para Hoy</span>
+            </div>
+          </div>
           
-          <button 
-            onClick={() => {
-              setViewMode('proximos');
-              setSelectedMenu(null);
-            }}
-            style={{
-              ...styles.filterButton,
-              ...(viewMode === 'proximos' ? styles.filterButtonActive : {})
-            }}
-          >
-            <FaCalendarWeek />
-            <span>Próximos Menús</span>
-            <span style={styles.filterBadge}>
-              {menusArray.filter(m => esFuturo(m.fecha)).length}
-            </span>
-          </button>
+          <div style={styles.statCard}>
+            <div style={styles.statIcon}>
+              <FaCalendarWeek />
+            </div>
+            <div style={styles.statContent}>
+              <span style={styles.statCount}>{stats.futuros}</span>
+              <span style={styles.statName}>Próximos</span>
+            </div>
+          </div>
+          
+          <div style={styles.statCard}>
+            <div style={styles.statIcon}>
+              <FaCheck />
+            </div>
+            <div style={styles.statContent}>
+              <span style={styles.statCount}>{stats.activos}</span>
+              <span style={styles.statName}>Activos</span>
+            </div>
+          </div>
         </div>
+      </div>
 
-        <div style={styles.searchAndFilter}>
-          <div style={styles.searchContainer}>
+      {/* Filtros y búsqueda */}
+      <div style={styles.filtersContainer}>
+        <div style={styles.filtersHeader}>
+          <h3 style={styles.filtersTitle}>
+            <FaFilter style={styles.filtersIcon} />
+            Filtros y Búsqueda
+          </h3>
+          <span style={styles.resultsCount}>
+            {menusFiltrados.length} de {menusArray.length} menús
+          </span>
+        </div>
+        
+        <div style={styles.filtersContent}>
+          <div style={styles.searchBox}>
+            <FaSearch style={styles.searchIcon} />
             <input
               type="text"
-              placeholder="Buscar menús..."
+              placeholder="Buscar menús por nombre o descripción..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               style={styles.searchInput}
             />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')}
+                style={styles.clearSearchButton}
+                title="Limpiar búsqueda"
+              >
+                <FaTimes />
+              </button>
+            )}
           </div>
           
-          <select
-            value={filterActivo}
-            onChange={(e) => setFilterActivo(e.target.value)}
-            style={styles.statusFilter}
-          >
-            <option value="todos">Todos los estados</option>
-            <option value="activos">Solo activos</option>
-            <option value="inactivos">Solo inactivos</option>
-          </select>
+          <div style={styles.filtersRow}>
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Vista</label>
+              <div style={styles.viewButtons}>
+                <button
+                  onClick={() => {
+                    setViewMode('todos');
+                    setSelectedMenu(null);
+                  }}
+                  style={{
+                    ...styles.viewButton,
+                    ...(viewMode === 'todos' ? styles.viewButtonActive : {})
+                  }}
+                  title="Ver todos los menús"
+                >
+                  <FaCalendarAlt />
+                  Todos
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode('hoy');
+                    setSelectedMenu(null);
+                  }}
+                  style={{
+                    ...styles.viewButton,
+                    ...(viewMode === 'hoy' ? styles.viewButtonActive : {})
+                  }}
+                  title="Ver menú de hoy"
+                >
+                  <FaCalendarDay />
+                  Hoy
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode('proximos');
+                    setSelectedMenu(null);
+                  }}
+                  style={{
+                    ...styles.viewButton,
+                    ...(viewMode === 'proximos' ? styles.viewButtonActive : {})
+                  }}
+                  title="Ver menús próximos"
+                >
+                  <FaCalendarWeek />
+                  Próximos
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode('pasados');
+                    setSelectedMenu(null);
+                  }}
+                  style={{
+                    ...styles.viewButton,
+                    ...(viewMode === 'pasados' ? styles.viewButtonActive : {})
+                  }}
+                  title="Ver menús pasados"
+                >
+                  <FaCalendarAlt />
+                  Pasados
+                </button>
+              </div>
+            </div>
+            
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Estado</label>
+              <select
+                value={filterActivo}
+                onChange={(e) => setFilterActivo(e.target.value)}
+                style={styles.filterSelect}
+              >
+                <option value="todos">Todos los estados</option>
+                <option value="activos">Solo activos</option>
+                <option value="inactivos">Solo inactivos</option>
+              </select>
+            </div>
+            
+            <div style={styles.filterGroup}>
+              <label style={styles.filterLabel}>Acciones</label>
+              <div style={styles.actionsGroup}>
+                <button
+                  onClick={clearFilters}
+                  style={styles.actionButton}
+                  title="Limpiar todos los filtros"
+                  disabled={!searchTerm && filterActivo === 'todos' && viewMode === 'todos'}
+                >
+                  <FaTimes />
+                  <span>Limpiar</span>
+                </button>
+                <button
+                  onClick={() => handleOpenModal()}
+                  style={styles.createButton}
+                  title="Crear nuevo menú"
+                >
+                  <FaPlus />
+                  <span>Nuevo Menú</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Contenido principal */}
       <div style={styles.mainContent}>
+        {/* Lista de menús */}
         <div style={styles.menusList}>
           <div style={styles.listHeader}>
             <h3 style={styles.listTitle}>
               {viewMode === 'todos' && '📋 Todos los Menús'}
               {viewMode === 'hoy' && '📅 Menú de Hoy'}
               {viewMode === 'proximos' && '🗓️ Menús Próximos'}
+              {viewMode === 'pasados' && '📅 Menús Pasados'}
             </h3>
-            <span style={styles.countBadge}>
-              {menusFiltrados.length} {menusFiltrados.length === 1 ? 'menú' : 'menús'}
-            </span>
+            <div style={styles.listActions}>
+              <span style={styles.countBadge}>
+                {menusFiltrados.length} {menusFiltrados.length === 1 ? 'menú' : 'menús'}
+              </span>
+              <button
+                onClick={() => handleOpenModal()}
+                style={styles.createButtonSmall}
+                title="Crear nuevo menú"
+              >
+                <FaPlus />
+              </button>
+            </div>
           </div>
           
           {menusFiltrados.length === 0 ? (
@@ -373,13 +587,20 @@ const MenuDiasPage = () => {
               <h3 style={styles.emptyTitle}>
                 {viewMode === 'hoy' && '¡No hay menú para hoy!'}
                 {viewMode === 'proximos' && 'No hay menús programados'}
+                {viewMode === 'pasados' && 'No hay menús pasados'}
                 {viewMode === 'todos' && 'No hay menús registrados'}
               </h3>
               <p style={styles.emptyText}>
                 {viewMode === 'hoy' && 'Crea un menú para el día de hoy y comienza a recibir pedidos.'}
                 {viewMode === 'proximos' && 'Programa menús futuros para mantener tu oferta actualizada.'}
+                {viewMode === 'pasados' && 'No hay menús anteriores registrados.'}
                 {viewMode === 'todos' && 'Comienza creando tu primer menú del día.'}
               </p>
+              {(searchTerm || filterActivo !== 'todos' || viewMode !== 'todos') && (
+                <button onClick={clearFilters} style={styles.clearFiltersButton}>
+                  Limpiar filtros
+                </button>
+              )}
               <button onClick={() => handleOpenModal()} style={styles.emptyButton}>
                 <FaPlus />
                 Crear Menú
@@ -387,16 +608,21 @@ const MenuDiasPage = () => {
             </div>
           ) : (
             <div style={styles.menusGrid}>
-              {menusFiltrados.map((menu, index) => {
+              {menusFiltrados.map((menu) => {
                 const isToday = esHoy(menu.fecha);
+                const isFuture = esFuturo(menu.fecha);
+                const isPast = esPasado(menu.fecha);
                 
                 return (
                   <div 
-                    key={menu.id || `menu-${index}`}
+                    key={menu.id}
                     onClick={() => setSelectedMenu(menu)}
                     style={{
                       ...styles.menuCard,
-                      ...(selectedMenu?.id === menu.id ? styles.menuCardSelected : {})
+                      ...(selectedMenu?.id === menu.id ? styles.menuCardSelected : {}),
+                      ...(isToday ? styles.menuCardToday : {}),
+                      ...(isFuture ? styles.menuCardFuture : {}),
+                      ...(isPast ? styles.menuCardPast : {})
                     }}
                   >
                     {isToday && (
@@ -411,7 +637,7 @@ const MenuDiasPage = () => {
                       </div>
                       <div style={{
                         ...styles.menuEstado,
-                        backgroundColor: menu.activo ? '#10b981' : '#6b7280'
+                        backgroundColor: menu.activo ? colors.success : colors.text.light
                       }}>
                         {menu.activo ? '✓ Activo' : '✕ Inactivo'}
                       </div>
@@ -441,7 +667,7 @@ const MenuDiasPage = () => {
                           e.stopPropagation();
                           handleOpenModal(menu);
                         }}
-                        style={styles.actionButton}
+                        style={styles.actionButtonSmall}
                         title="Editar menú"
                       >
                         <FaEdit />
@@ -451,7 +677,7 @@ const MenuDiasPage = () => {
                           e.stopPropagation();
                           handleCopyMenu(menu);
                         }}
-                        style={styles.actionButton}
+                        style={styles.actionButtonSmall}
                         title="Copiar menú"
                       >
                         <FaCopy />
@@ -461,7 +687,7 @@ const MenuDiasPage = () => {
                           e.stopPropagation();
                           handleDeleteClick(menu);
                         }}
-                        style={{...styles.actionButton, color: '#dc2626'}}
+                        style={{...styles.actionButtonSmall, color: colors.danger}}
                         title="Eliminar menú"
                       >
                         <FaTrash />
@@ -474,6 +700,7 @@ const MenuDiasPage = () => {
           )}
         </div>
 
+        {/* Panel de detalle */}
         {selectedMenu ? (
           <div style={styles.detailPanel}>
             <div style={styles.detailHeader}>
@@ -484,6 +711,14 @@ const MenuDiasPage = () => {
                 </p>
               </div>
               <div style={styles.detailActions}>
+                <button 
+                  onClick={() => handleCopyMenu(selectedMenu)}
+                  style={styles.copyButton}
+                  title="Copiar menú"
+                >
+                  <FaCopy />
+                  Copiar
+                </button>
                 <button 
                   onClick={() => handleOpenModal(selectedMenu)}
                   style={styles.editButton}
@@ -505,7 +740,7 @@ const MenuDiasPage = () => {
               {loadingProductos ? (
                 <div style={styles.loadingProducts}>
                   <div style={styles.spinner} />
-                  <p>Cargando productos...</p>
+                  <p>Cargando productos del menú...</p>
                 </div>
               ) : (
                 <>
@@ -525,8 +760,8 @@ const MenuDiasPage = () => {
                       <div style={styles.infoCard}>
                         <div style={{
                           ...styles.infoIcon,
-                          backgroundColor: selectedMenu.activo ? '#10b98120' : '#6b728020',
-                          color: selectedMenu.activo ? '#10b981' : '#6b7280'
+                          backgroundColor: selectedMenu.activo ? colors.success + '20' : colors.text.light + '20',
+                          color: selectedMenu.activo ? colors.success : colors.text.light
                         }}>
                           {selectedMenu.activo ? '✓' : '✕'}
                         </div>
@@ -534,7 +769,7 @@ const MenuDiasPage = () => {
                           <div style={styles.infoLabel}>Estado</div>
                           <div style={{
                             ...styles.infoValue,
-                            color: selectedMenu.activo ? '#10b981' : '#6b7280',
+                            color: selectedMenu.activo ? colors.success : colors.text.light,
                             fontWeight: '700'
                           }}>
                             {selectedMenu.activo ? 'Activo' : 'Inactivo'}
@@ -568,6 +803,9 @@ const MenuDiasPage = () => {
                     <div style={styles.productsSectionHeader}>
                       <h4 style={styles.sectionTitle}>
                         🍽️ Productos del Menú
+                        <span style={styles.productsCount}>
+                          ({menuProductos.length})
+                        </span>
                       </h4>
                       <button
                         onClick={() => handleOpenModal(selectedMenu)}
@@ -604,6 +842,14 @@ const MenuDiasPage = () => {
                                   src={producto.producto_info.imagen} 
                                   alt={producto.producto_info.nombre}
                                   style={styles.productImg}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.parentElement.innerHTML = `
+                                      <div style="${styles.productPlaceholder}">
+                                        <FaUtensils />
+                                      </div>
+                                    `;
+                                  }}
                                 />
                               ) : (
                                 <div style={styles.productPlaceholder}>
@@ -619,8 +865,8 @@ const MenuDiasPage = () => {
                                 </h5>
                                 <div style={{
                                   ...styles.disponibleBadge,
-                                  backgroundColor: producto.disponible !== false ? '#10b98120' : '#6b728020',
-                                  color: producto.disponible !== false ? '#10b981' : '#6b7280'
+                                  backgroundColor: producto.disponible !== false ? colors.success + '20' : colors.text.light + '20',
+                                  color: producto.disponible !== false ? colors.success : colors.text.light
                                 }}>
                                   {producto.disponible !== false ? '✓ Disponible' : '✕ No disponible'}
                                 </div>
@@ -633,6 +879,11 @@ const MenuDiasPage = () => {
                               <div style={styles.productFooter}>
                                 <span style={styles.productPrice}>
                                   💵 ${parseFloat(producto.precio_especial || producto.producto_info?.precio || 0).toFixed(2)}
+                                  {producto.precio_especial && producto.precio_especial !== producto.producto_info?.precio && (
+                                    <span style={styles.originalPrice}>
+                                      ${parseFloat(producto.producto_info?.precio || 0).toFixed(2)}
+                                    </span>
+                                  )}
                                 </span>
                                 <span style={styles.productCategoria}>
                                   {producto.producto_info?.categoria_nombre || 'Sin categoría'}
@@ -668,6 +919,7 @@ const MenuDiasPage = () => {
         )}
       </div>
 
+      {/* Modal de menú */}
       <ModalMenu
         isOpen={modalOpen}
         onClose={handleCloseModal}
@@ -677,31 +929,85 @@ const MenuDiasPage = () => {
         loading={loading || loadingProductos}
       />
 
+      {/* Modal de confirmación de eliminación */}
       {showDeleteConfirm && (
         <div style={styles.confirmOverlay}>
           <div style={styles.confirmModal}>
-            <h3 style={styles.confirmTitle}>¿Eliminar menú?</h3>
+            <div style={styles.confirmHeader}>
+              <div style={styles.confirmIcon}>
+                <FaExclamationTriangle />
+              </div>
+              <h3 style={styles.confirmTitle}>¿Eliminar menú?</h3>
+            </div>
             <p style={styles.confirmText}>
-              ¿Estás seguro de que deseas eliminar el menú "{menuToDelete?.nombre}"?
+              ¿Estás seguro de que deseas eliminar el menú <strong>"{menuToDelete?.nombre}"</strong>?
+              <br />
               Esta acción no se puede deshacer.
             </p>
             <div style={styles.confirmActions}>
               <button 
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  toast.info('Eliminación cancelada');
+                }}
                 style={styles.confirmCancel}
               >
+                <FaTimes />
                 Cancelar
               </button>
               <button 
                 onClick={handleConfirmDelete}
                 style={styles.confirmDelete}
               >
+                <FaTrash />
                 Eliminar
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Inyectar estilos CSS */}
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateX(100%);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        button:not(:disabled):hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .menu-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        }
+        
+        .fade-in {
+          animation: fadeIn 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 };
@@ -710,12 +1016,14 @@ const colors = {
   primary: '#2c5aa0',
   primaryLight: '#3a6bc5',
   primaryDark: '#1e3a8a',
-  background: '#f8fafc',
-  card: '#ffffff',
-  border: '#e5e7eb',
+  secondary: '#6b7280',
   success: '#10b981',
   warning: '#f59e0b',
   danger: '#dc2626',
+  info: '#3b82f6',
+  background: '#f8fafc',
+  card: '#ffffff',
+  border: '#e5e7eb',
   text: {
     primary: '#111827',
     secondary: '#6b7280',
@@ -724,11 +1032,11 @@ const colors = {
 };
 
 const styles = {
-  // Container principal
   container: {
     padding: '24px',
     backgroundColor: colors.background,
-    minHeight: '100vh'
+    minHeight: '100vh',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
 
   // Header
@@ -736,11 +1044,9 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '32px',
-    backgroundColor: colors.card,
-    padding: '24px',
-    borderRadius: '12px',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+    marginBottom: '24px',
+    flexWrap: 'wrap',
+    gap: '16px'
   },
   headerLeft: {
     display: 'flex',
@@ -748,32 +1054,246 @@ const styles = {
     gap: '16px'
   },
   headerIcon: {
-    width: '48px',
-    height: '48px',
+    width: '56px',
+    height: '56px',
     backgroundColor: `${colors.primary}15`,
     color: colors.primary,
     borderRadius: '12px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '24px'
+    fontSize: '24px',
+    boxShadow: '0 2px 8px rgba(44, 90, 160, 0.1)'
   },
   title: {
     fontSize: '28px',
     fontWeight: '700',
     color: colors.text.primary,
-    margin: 0
+    margin: 0,
+    lineHeight: '1.2'
   },
   subtitle: {
     fontSize: '14px',
     color: colors.text.secondary,
     margin: '4px 0 0 0'
   },
-  crearButton: {
+  headerStats: {
+    display: 'flex',
+    gap: '20px'
+  },
+  statItem: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end'
+  },
+  statLabel: {
+    fontSize: '12px',
+    color: colors.text.secondary,
+    marginBottom: '4px',
+    fontWeight: '600'
+  },
+  statValue: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: colors.primary
+  },
+
+  // Estadísticas
+  statsContainer: {
+    marginBottom: '24px'
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: '16px'
+  },
+  statCard: {
+    backgroundColor: colors.card,
+    borderRadius: '12px',
+    padding: '20px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+    border: `1px solid ${colors.border}`,
+    transition: 'all 0.2s ease'
+  },
+  statIcon: {
+    width: '48px',
+    height: '48px',
+    backgroundColor: colors.primary + '10',
+    color: colors.primary,
+    borderRadius: '10px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '20px'
+  },
+  statContent: {
+    flex: 1
+  },
+  statCount: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: colors.text.primary,
+    display: 'block',
+    lineHeight: '1.2'
+  },
+  statName: {
+    fontSize: '13px',
+    color: colors.text.secondary,
+    fontWeight: '600'
+  },
+
+  // Filtros
+  filtersContainer: {
+    backgroundColor: colors.card,
+    borderRadius: '12px',
+    padding: '20px',
+    marginBottom: '24px',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+  },
+  filtersHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '20px'
+  },
+  filtersTitle: {
+    fontSize: '16px',
+    fontWeight: '700',
+    color: colors.text.primary,
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  filtersIcon: {
+    color: colors.primary
+  },
+  resultsCount: {
+    backgroundColor: colors.primary + '10',
+    color: colors.primary,
+    padding: '6px 12px',
+    borderRadius: '20px',
+    fontSize: '13px',
+    fontWeight: '600'
+  },
+  filtersContent: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  searchBox: {
+    position: 'relative'
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '14px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: colors.text.light,
+    fontSize: '14px'
+  },
+  searchInput: {
+    width: '100%',
+    padding: '12px 40px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '10px',
+    fontSize: '14px',
+    backgroundColor: colors.background,
+    color: colors.text.primary,
+    outline: 'none',
+    transition: 'all 0.2s ease'
+  },
+  clearSearchButton: {
+    position: 'absolute',
+    right: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: colors.text.light,
+    cursor: 'pointer',
+    fontSize: '14px',
+    padding: '4px'
+  },
+  filtersRow: {
+    display: 'flex',
+    gap: '20px',
+    flexWrap: 'wrap'
+  },
+  filterGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    flex: 1,
+    minWidth: '200px'
+  },
+  filterLabel: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: colors.text.primary
+  },
+  viewButtons: {
+    display: 'flex',
+    gap: '8px'
+  },
+  viewButton: {
+    flex: 1,
+    backgroundColor: colors.background,
+    border: `1px solid ${colors.border}`,
+    color: colors.text.secondary,
+    padding: '10px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    transition: 'all 0.2s ease',
+    minWidth: '80px'
+  },
+  viewButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+    color: '#ffffff'
+  },
+  filterSelect: {
+    padding: '10px 12px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '8px',
+    fontSize: '14px',
+    backgroundColor: colors.card,
+    color: colors.text.primary,
+    cursor: 'pointer',
+    outline: 'none'
+  },
+  actionsGroup: {
+    display: 'flex',
+    gap: '8px'
+  },
+  actionButton: {
+    backgroundColor: colors.background,
+    border: `1px solid ${colors.border}`,
+    color: colors.text.secondary,
+    padding: '10px 16px',
+    borderRadius: '8px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    transition: 'all 0.2s ease'
+  },
+  createButton: {
     backgroundColor: colors.primary,
     color: '#ffffff',
     border: 'none',
-    padding: '12px 24px',
+    padding: '12px 20px',
     borderRadius: '8px',
     fontSize: '14px',
     fontWeight: '600',
@@ -784,72 +1304,20 @@ const styles = {
     transition: 'all 0.2s ease',
     boxShadow: '0 2px 4px rgba(44, 90, 160, 0.2)'
   },
-
-  // Filtros
-  filtersContainer: {
-    backgroundColor: colors.card,
-    padding: '20px',
-    borderRadius: '12px',
-    marginBottom: '24px',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-  },
-  filters: {
-    display: 'flex',
-    gap: '12px',
-    flexWrap: 'wrap'
-  },
-  filterButton: {
-    backgroundColor: 'transparent',
-    border: `2px solid ${colors.border}`,
-    color: colors.text.secondary,
-    padding: '10px 16px',
+  createButtonSmall: {
+    backgroundColor: colors.primary,
+    color: '#ffffff',
+    border: 'none',
+    padding: '8px',
     borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
+    fontSize: '13px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    justifyContent: 'center',
+    width: '36px',
+    height: '36px',
     transition: 'all 0.2s ease'
-  },
-  filterButtonActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-    color: '#ffffff'
-  },
-  filterBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    padding: '2px 8px',
-    borderRadius: '10px',
-    fontSize: '12px',
-    fontWeight: '700'
-  },
-  searchAndFilter: {
-    display: 'flex',
-    gap: '12px',
-    marginTop: '16px'
-  },
-  searchContainer: {
-    flex: 1
-  },
-  searchInput: {
-    width: '100%',
-    padding: '10px 14px',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '8px',
-    fontSize: '14px',
-    outline: 'none',
-    transition: 'all 0.2s ease'
-  },
-  statusFilter: {
-    padding: '10px 14px',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '8px',
-    fontSize: '14px',
-    backgroundColor: colors.card,
-    minWidth: '160px',
-    cursor: 'pointer',
-    outline: 'none'
   },
 
   // Contenido principal
@@ -857,7 +1325,7 @@ const styles = {
     display: 'grid',
     gridTemplateColumns: '1fr 400px',
     gap: '24px',
-    '@media (max-width: 1024px)': {
+    '@media (max-width: 1200px)': {
       gridTemplateColumns: '1fr'
     }
   },
@@ -873,21 +1341,27 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '20px',
-    paddingBottom: '16px',
-    borderBottom: `1px solid ${colors.border}`
+    marginBottom: '20px'
   },
   listTitle: {
     fontSize: '18px',
     fontWeight: '700',
     color: colors.text.primary,
-    margin: 0
+    margin: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  listActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
   },
   countBadge: {
-    backgroundColor: `${colors.primary}15`,
+    backgroundColor: colors.primary + '10',
     color: colors.primary,
-    padding: '4px 12px',
-    borderRadius: '12px',
+    padding: '6px 12px',
+    borderRadius: '20px',
     fontSize: '13px',
     fontWeight: '600'
   },
@@ -895,22 +1369,31 @@ const styles = {
   // Grid de menús
   menusGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
     gap: '16px'
   },
   menuCard: {
-    position: 'relative',
-    border: `2px solid ${colors.border}`,
+    backgroundColor: colors.card,
+    border: `1px solid ${colors.border}`,
     borderRadius: '12px',
     padding: '16px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    backgroundColor: colors.card
+    position: 'relative'
   },
   menuCardSelected: {
     borderColor: colors.primary,
     boxShadow: '0 4px 12px rgba(44, 90, 160, 0.15)',
-    transform: 'translateY(-2px)'
+    backgroundColor: colors.primary + '05'
+  },
+  menuCardToday: {
+    borderLeft: `4px solid ${colors.warning}`
+  },
+  menuCardFuture: {
+    borderLeft: `4px solid ${colors.success}`
+  },
+  menuCardPast: {
+    borderLeft: `4px solid ${colors.text.light}`
   },
   todayBadge: {
     position: 'absolute',
@@ -918,23 +1401,25 @@ const styles = {
     right: '12px',
     backgroundColor: colors.warning,
     color: '#ffffff',
-    padding: '4px 10px',
+    padding: '4px 8px',
     borderRadius: '6px',
     fontSize: '11px',
     fontWeight: '700',
     letterSpacing: '0.5px'
   },
   menuCardHeader: {
-    marginBottom: '12px'
+    marginBottom: '12px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start'
   },
   menuFecha: {
     fontSize: '12px',
     color: colors.text.secondary,
-    marginBottom: '8px'
+    fontWeight: '500'
   },
   menuEstado: {
-    display: 'inline-block',
-    padding: '4px 10px',
+    padding: '4px 8px',
     borderRadius: '6px',
     fontSize: '11px',
     fontWeight: '600',
@@ -947,18 +1432,18 @@ const styles = {
     fontSize: '16px',
     fontWeight: '700',
     color: colors.text.primary,
-    margin: '0 0 8px 0'
+    margin: '0 0 8px 0',
+    lineHeight: '1.3'
   },
   menuDescripcion: {
     fontSize: '13px',
     color: colors.text.secondary,
     margin: '0 0 12px 0',
     lineHeight: '1.5',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
     display: '-webkit-box',
     WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical'
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden'
   },
   menuStats: {
     display: 'flex',
@@ -973,7 +1458,7 @@ const styles = {
   },
   statIcon: {
     color: colors.primary,
-    fontSize: '14px'
+    fontSize: '13px'
   },
   menuCardFooter: {
     display: 'flex',
@@ -981,55 +1466,18 @@ const styles = {
     paddingTop: '12px',
     borderTop: `1px solid ${colors.border}`
   },
-  actionButton: {
+  actionButtonSmall: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: colors.background,
     border: `1px solid ${colors.border}`,
     color: colors.text.secondary,
     padding: '8px',
     borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: '13px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    transition: 'all 0.2s ease'
-  },
-
-  // Estado vacío
-  emptyState: {
-    textAlign: 'center',
-    padding: '60px 20px'
-  },
-  emptyIcon: {
-    fontSize: '64px',
-    color: colors.text.light,
-    marginBottom: '16px'
-  },
-  emptyTitle: {
-    fontSize: '20px',
-    fontWeight: '700',
-    color: colors.text.primary,
-    margin: '0 0 8px 0'
-  },
-  emptyText: {
-    fontSize: '14px',
-    color: colors.text.secondary,
-    margin: '0 0 24px 0',
-    lineHeight: '1.6'
-  },
-  emptyButton: {
-    backgroundColor: colors.primary,
-    color: '#ffffff',
-    border: 'none',
-    padding: '12px 24px',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '8px',
     transition: 'all 0.2s ease'
   },
 
@@ -1040,19 +1488,20 @@ const styles = {
     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
     display: 'flex',
     flexDirection: 'column',
-    maxHeight: 'calc(100vh - 200px)',
+    height: 'calc(100vh - 300px)',
+    minHeight: '500px',
     position: 'sticky',
     top: '24px'
   },
   detailHeader: {
-    padding: '24px',
+    padding: '20px',
     borderBottom: `1px solid ${colors.border}`,
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start'
   },
   detailTitle: {
-    fontSize: '20px',
+    fontSize: '18px',
     fontWeight: '700',
     color: colors.text.primary,
     margin: '0 0 4px 0'
@@ -1066,11 +1515,24 @@ const styles = {
     display: 'flex',
     gap: '8px'
   },
+  copyButton: {
+    backgroundColor: colors.info,
+    color: '#ffffff',
+    border: 'none',
+    padding: '8px 12px',
+    borderRadius: '6px',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
   editButton: {
     backgroundColor: colors.primary,
     color: '#ffffff',
     border: 'none',
-    padding: '8px 16px',
+    padding: '8px 12px',
     borderRadius: '6px',
     fontSize: '13px',
     fontWeight: '600',
@@ -1083,7 +1545,7 @@ const styles = {
     backgroundColor: colors.danger,
     color: '#ffffff',
     border: 'none',
-    padding: '8px 16px',
+    padding: '8px 12px',
     borderRadius: '6px',
     fontSize: '13px',
     fontWeight: '600',
@@ -1093,7 +1555,7 @@ const styles = {
     gap: '6px'
   },
   detailBody: {
-    padding: '24px',
+    padding: '20px',
     overflowY: 'auto',
     flex: 1
   },
@@ -1106,7 +1568,10 @@ const styles = {
     fontSize: '16px',
     fontWeight: '700',
     color: colors.text.primary,
-    margin: '0 0 16px 0'
+    margin: '0 0 16px 0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
   },
   infoGrid: {
     display: 'grid',
@@ -1124,19 +1589,20 @@ const styles = {
   infoIcon: {
     width: '40px',
     height: '40px',
-    backgroundColor: `${colors.primary}15`,
+    backgroundColor: colors.primary + '10',
     color: colors.primary,
     borderRadius: '8px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '20px',
+    fontSize: '18px',
     flexShrink: 0
   },
   infoLabel: {
     fontSize: '12px',
     color: colors.text.secondary,
-    marginBottom: '4px'
+    marginBottom: '4px',
+    fontWeight: '500'
   },
   infoValue: {
     fontSize: '14px',
@@ -1153,6 +1619,12 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: '16px'
+  },
+  productsCount: {
+    fontSize: '14px',
+    color: colors.text.secondary,
+    fontWeight: '400',
+    marginLeft: '8px'
   },
   addProductButton: {
     backgroundColor: colors.primary,
@@ -1235,24 +1707,26 @@ const styles = {
     fontSize: '14px',
     fontWeight: '700',
     color: colors.text.primary,
-    margin: 0
+    margin: 0,
+    flex: 1
   },
   disponibleBadge: {
     padding: '4px 8px',
     borderRadius: '6px',
     fontSize: '11px',
-    fontWeight: '600'
+    fontWeight: '600',
+    flexShrink: 0,
+    marginLeft: '8px'
   },
   productDescripcion: {
     fontSize: '12px',
     color: colors.text.secondary,
     margin: '0 0 8px 0',
     lineHeight: '1.4',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
     display: '-webkit-box',
     WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical'
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden'
   },
   productFooter: {
     display: 'flex',
@@ -1263,14 +1737,75 @@ const styles = {
   productPrice: {
     fontSize: '14px',
     fontWeight: '700',
-    color: colors.primary
+    color: colors.primary,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  originalPrice: {
+    fontSize: '12px',
+    color: colors.text.light,
+    textDecoration: 'line-through'
   },
   productCategoria: {
     fontSize: '11px',
     color: colors.text.light,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.background,
     padding: '4px 8px',
     borderRadius: '6px'
+  },
+
+  // Estados vacíos
+  emptyState: {
+    textAlign: 'center',
+    padding: '60px 20px'
+  },
+  emptyIcon: {
+    fontSize: '64px',
+    color: colors.text.light,
+    marginBottom: '16px',
+    opacity: 0.5
+  },
+  emptyTitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: colors.text.primary,
+    margin: '0 0 8px 0'
+  },
+  emptyText: {
+    fontSize: '14px',
+    color: colors.text.secondary,
+    margin: '0 0 24px 0',
+    lineHeight: '1.6',
+    maxWidth: '400px',
+    marginLeft: 'auto',
+    marginRight: 'auto'
+  },
+  clearFiltersButton: {
+    backgroundColor: colors.text.secondary,
+    color: '#ffffff',
+    border: 'none',
+    padding: '10px 20px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    marginRight: '12px'
+  },
+  emptyButton: {
+    backgroundColor: colors.primary,
+    color: '#ffffff',
+    border: 'none',
+    padding: '12px 24px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
   },
 
   // Panel sin selección
@@ -1283,12 +1818,15 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '60px 40px',
-    textAlign: 'center'
+    textAlign: 'center',
+    height: 'calc(100vh - 300px)',
+    minHeight: '500px'
   },
   noSelectionIcon: {
     fontSize: '64px',
     color: colors.text.light,
-    marginBottom: '16px'
+    marginBottom: '16px',
+    opacity: 0.5
   },
   noSelectionTitle: {
     fontSize: '20px',
@@ -1310,7 +1848,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '400px',
+    minHeight: '100vh',
     gap: '16px'
   },
   spinner: {
@@ -1323,7 +1861,8 @@ const styles = {
   },
   loadingText: {
     fontSize: '14px',
-    color: colors.text.secondary
+    color: colors.text.secondary,
+    fontWeight: '500'
   },
   loadingProducts: {
     display: 'flex',
@@ -1338,25 +1877,27 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: '400px',
+    minHeight: '100vh',
     gap: '16px',
-    padding: '40px'
+    padding: '40px',
+    textAlign: 'center'
   },
   errorIcon: {
     fontSize: '48px',
-    color: colors.danger
+    color: colors.danger,
+    marginBottom: '8px'
   },
   errorTitle: {
     fontSize: '20px',
     fontWeight: '700',
     color: colors.text.primary,
-    margin: 0
+    margin: '0 0 8px 0'
   },
   errorText: {
     fontSize: '14px',
     color: colors.text.secondary,
-    textAlign: 'center',
-    maxWidth: '400px'
+    maxWidth: '400px',
+    lineHeight: '1.6'
   },
   retryButton: {
     backgroundColor: colors.primary,
@@ -1367,7 +1908,11 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    marginTop: '8px'
+    marginTop: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
   },
 
   // Modal de confirmación
@@ -1381,54 +1926,87 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1001
+    zIndex: 1000,
+    backdropFilter: 'blur(4px)',
+    animation: 'fadeIn 0.2s ease-out'
   },
   confirmModal: {
     backgroundColor: colors.card,
-    borderRadius: '12px',
+    borderRadius: '16px',
     padding: '24px',
     maxWidth: '400px',
     width: '90%',
-    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    animation: 'fadeIn 0.3s ease-out'
+  },
+  confirmHeader: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '12px',
+    marginBottom: '20px'
+  },
+  confirmIcon: {
+    width: '60px',
+    height: '60px',
+    backgroundColor: colors.danger + '20',
+    color: colors.danger,
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '28px'
   },
   confirmTitle: {
-    fontSize: '18px',
+    fontSize: '20px',
     fontWeight: '700',
     color: colors.text.primary,
-    margin: '0 0 12px 0'
+    margin: 0,
+    textAlign: 'center'
   },
   confirmText: {
     fontSize: '14px',
     color: colors.text.secondary,
-    margin: '0 0 24px 0',
-    lineHeight: '1.5'
+    lineHeight: '1.6',
+    marginBottom: '24px',
+    textAlign: 'center'
   },
   confirmActions: {
     display: 'flex',
-    justifyContent: 'flex-end',
     gap: '12px'
   },
   confirmCancel: {
-    backgroundColor: 'transparent',
-    border: `1px solid ${colors.border}`,
+    flex: 1,
+    backgroundColor: colors.background,
+    border: `2px solid ${colors.border}`,
     color: colors.text.primary,
-    padding: '10px 20px',
+    padding: '12px',
     borderRadius: '8px',
     fontSize: '14px',
     fontWeight: '600',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
   },
   confirmDelete: {
+    flex: 1,
     backgroundColor: colors.danger,
     color: '#ffffff',
     border: 'none',
-    padding: '10px 20px',
+    padding: '12px',
     borderRadius: '8px',
     fontSize: '14px',
     fontWeight: '600',
-    cursor: 'pointer'
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    transition: 'all 0.2s ease'
   }
 };
-
 
 export default MenuDiasPage;

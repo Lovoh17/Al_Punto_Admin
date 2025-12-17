@@ -2,8 +2,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
-  timeout: 10000,
+  baseURL: 'https://backend-al-punto-1.onrender.com/api',
+  timeout: 15000, // Aumentado a 15 segundos para backend en render
   headers: {
     'Content-Type': 'application/json',
   },
@@ -16,15 +16,24 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log('🔵 API Request:', config.method.toUpperCase(), config.url);
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('❌ Request Error:', error);
+    return Promise.reject(error);
+  }
 );
 
 // Interceptor para responses
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('✅ API Response:', response.config.url, response.status);
+    return response;
+  },
   (error) => {
+    console.error('❌ Response Error:', error.response?.status, error.response?.data);
+    
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -38,11 +47,41 @@ api.interceptors.response.use(
 // SERVICIO DE CATEGORÍAS
 // ============================================
 export const categoriaService = {
+  // Obtener todas las categorías
   getAll: () => api.get('/categorias'),
+  
+  // Obtener por ID
   getById: (id) => api.get(`/categorias/${id}`),
-  create: (categoria) => api.post('/categorias', categoria),
-  update: (id, categoria) => api.put(`/categorias/${id}`, categoria),
-  delete: (id) => api.delete(`/categorias/${id}`),
+  
+  // Obtener estadísticas
+  getEstadisticas: () => api.get('/categorias/estadisticas'),
+  
+  // Obtener categorías con productos
+  getConProductos: () => api.get('/categorias/con-productos'),
+  
+  // Crear categoría
+  create: (categoria) => {
+    console.log('📤 Creando categoría:', categoria);
+    return api.post('/categorias', categoria);
+  },
+  
+  // Actualizar categoría
+  update: (id, categoria) => {
+    console.log('📤 Actualizando categoría:', id, categoria);
+    return api.put(`/categorias/${id}`, categoria);
+  },
+  
+  // Eliminar categoría
+  delete: (id) => {
+    console.log('📤 Eliminando categoría:', id);
+    return api.delete(`/categorias/${id}`);
+  },
+  
+  // Reactivar categoría (si el backend lo soporta)
+  reactivar: (id) => {
+    console.log('📤 Reactivando categoría:', id);
+    return api.patch(`/categorias/${id}/reactivar`);
+  }
 };
 
 // ============================================
@@ -52,9 +91,18 @@ export const productoService = {
   getAll: () => api.get('/productos'),
   getById: (id) => api.get(`/productos/${id}`),
   getByCategoria: (categoriaId) => api.get(`/productos?categoria_id=${categoriaId}&disponible=true`),
-  create: (producto) => api.post('/productos', producto),
-  update: (id, producto) => api.put(`/productos/${id}`, producto),
-  delete: (id) => api.delete(`/productos/${id}`),
+  create: (producto) => {
+    console.log('📤 Creando producto:', producto);
+    return api.post('/productos', producto);
+  },
+  update: (id, producto) => {
+    console.log('📤 Actualizando producto:', id, producto);
+    return api.put(`/productos/${id}`, producto);
+  },
+  delete: (id) => {
+    console.log('📤 Eliminando producto:', id);
+    return api.delete(`/productos/${id}`);
+  }
 };
 
 // ============================================
@@ -68,31 +116,56 @@ export const pedidoService = {
   getByNumero: (numeroPedido) => api.get(`/Pedidos/numero/${numeroPedido}`),
   getEstadisticas: () => api.get('/Pedidos/estadisticas'),
   getReporteVentas: () => api.get('/Pedidos/reportes/ventas'),
-  crear: (pedidoData) => api.post('/Pedidos', pedidoData),
-  update: (id, pedido) => api.put(`/Pedidos/${id}`, pedido),
-  cambiarEstado: (id, estado) => api.patch(`/Pedidos/${id}/estado`, { estado }),
-  cancelar: (id) => api.patch(`/Pedidos/${id}/cancelar`),
-  delete: (id) => api.delete(`/Pedidos/${id}`),
+  crear: (pedidoData) => {
+    console.log('📤 Creando pedido:', pedidoData);
+    return api.post('/Pedidos', pedidoData);
+  },
+  update: (id, pedido) => {
+    console.log('📤 Actualizando pedido:', id, pedido);
+    return api.put(`/Pedidos/${id}`, pedido);
+  },
+  cambiarEstado: (id, estado) => {
+    console.log('📤 Cambiando estado de pedido:', id, estado);
+    return api.patch(`/Pedidos/${id}/estado`, { estado });
+  },
+  cancelar: (id) => {
+    console.log('📤 Cancelando pedido:', id);
+    return api.patch(`/Pedidos/${id}/cancelar`);
+  },
+  delete: (id) => {
+    console.log('📤 Eliminando pedido:', id);
+    return api.delete(`/Pedidos/${id}`);
+  }
 };
 
 // ============================================
 // SERVICIO DE PEDIDOS_PRODUCTOS
 // ============================================
 export const pedidosProductosService = {
-  obtenerProductosPedido: (pedidoId) => 
-    api.get(`/Pedidos_Productos/${pedidoId}/productos`),
+  obtenerProductosPedido: (pedidoId) => {
+    console.log('📤 Obteniendo productos del pedido:', pedidoId);
+    return api.get(`/Pedidos_Productos/${pedidoId}/productos`);
+  },
   
-  agregarProductos: (pedidoId, productos) => 
-    api.post(`/Pedidos_Productos/${pedidoId}/productos/multiples`, { productos }),
+  agregarProductos: (pedidoId, productos) => {
+    console.log('📤 Agregando productos al pedido:', pedidoId, productos);
+    return api.post(`/Pedidos_Productos/${pedidoId}/productos/multiples`, { productos });
+  },
   
-  actualizarCantidad: (itemId, cantidad) => 
-    api.patch(`/Pedidos_Productos/${itemId}/cantidad`, { cantidad }),
+  actualizarCantidad: (itemId, cantidad) => {
+    console.log('📤 Actualizando cantidad:', itemId, cantidad);
+    return api.patch(`/Pedidos_Productos/${itemId}/cantidad`, { cantidad });
+  },
   
-  actualizarNotas: (itemId, notas) => 
-    api.patch(`/Pedidos_Productos/${itemId}/notas`, { notas }),
+  actualizarNotas: (itemId, notas) => {
+    console.log('📤 Actualizando notas:', itemId, notas);
+    return api.patch(`/Pedidos_Productos/${itemId}/notas`, { notas });
+  },
   
-  eliminarProducto: (itemId) => 
-    api.delete(`/Pedidos_Productos/${itemId}`),
+  eliminarProducto: (itemId) => {
+    console.log('📤 Eliminando producto del pedido:', itemId);
+    return api.delete(`/Pedidos_Productos/${itemId}`);
+  }
 };
 
 // ============================================
@@ -107,6 +180,7 @@ export const clienteService = {
     api.get('/productos?disponible=true'),
   
   crearPedidoCompleto: (datosCarrito) => {
+    console.log('📤 Creando pedido completo:', datosCarrito);
     return api.post('/Pedidos', {
       usuario_id: datosCarrito.usuario_id,
       numero_mesa: datosCarrito.numero_mesa || null,
@@ -119,7 +193,7 @@ export const clienteService = {
         notas: item.notas || ''
       }))
     });
-  },
+  }
 };
 
 // ============================================
@@ -141,27 +215,41 @@ export const menuDiasService = {
   // Obtener por fecha
   getByFecha: (fecha) => api.get(`/Menu_Dias/fecha/${fecha}`),
   
-  // Obtener productos de un menú (usando la ruta correcta del backend)
-  getProductos: (menuId) => api.get(`/Menu_Dias/${menuId}/productos`),
+  // Obtener productos de un menú
+  getProductos: (menuId) => {
+    console.log('📤 Obteniendo productos del menú:', menuId);
+    return api.get(`/Menu_Dias/${menuId}/productos`);
+  },
   
-  // ✅ CORREGIDO: Crear menú (sin productos)
-  create: (menuData) => api.post('/Menu_Dias', menuData),
+  // Crear menú
+  create: (menuData) => {
+    console.log('📤 Creando menú:', menuData);
+    return api.post('/Menu_Dias', menuData);
+  },
   
   // Actualizar menú
-  update: (id, menuData) => api.put(`/Menu_Dias/${id}`, menuData),
+  update: (id, menuData) => {
+    console.log('📤 Actualizando menú:', id, menuData);
+    return api.put(`/Menu_Dias/${id}`, menuData);
+  },
   
-  // ✅ CORREGIDO: Agregar productos al menú (usando la ruta del backend)
-  agregarProductos: (menuId, productos) => 
-    api.post(`/Menu_Dias/${menuId}/productos`, { productos }),
+  // Agregar productos al menú
+  agregarProductos: (menuId, productos) => {
+    console.log('📤 Agregando productos al menú:', menuId, productos);
+    return api.post(`/Menu_Dias/${menuId}/productos`, { productos });
+  },
   
   // Eliminar menú
-  delete: (id) => api.delete(`/Menu_Dias/${id}`),
+  delete: (id) => {
+    console.log('📤 Eliminando menú:', id);
+    return api.delete(`/Menu_Dias/${id}`);
+  },
   
   // Obtener estadísticas
   getEstadisticas: () => api.get('/Menu_Dias/estadisticas'),
   
   // Obtener productos populares
-  getProductosPopulares: () => api.get('/Menu_Dias/productos-populares'),
+  getProductosPopulares: () => api.get('/Menu_Dias/productos-populares')
 };
 
 // ============================================
@@ -169,8 +257,10 @@ export const menuDiasService = {
 // ============================================
 export const menuDiasProductosService = {
   // Obtener productos por menú
-  getProductosPorMenu: (menuId) => 
-    api.get(`/Menu_dias_Productos/menu-dias/${menuId}/productos`),
+  getProductosPorMenu: (menuId) => {
+    console.log('📤 Obteniendo productos del menú (Menu_dias_Productos):', menuId);
+    return api.get(`/Menu_dias_Productos/menu-dias/${menuId}/productos`);
+  },
   
   // Obtener por categoría
   getPorCategoria: (menuId, categoriaId) => 
@@ -180,42 +270,53 @@ export const menuDiasProductosService = {
   getEstadisticas: (menuId) => 
     api.get(`/Menu_dias_Productos/menu-dias/${menuId}/productos/estadisticas`),
   
-  // ✅ CORREGIDO: Agregar múltiples productos
+  // Agregar múltiples productos
   agregarMultiples: (menuId, productos) => {
-    console.log('🔵 API Call - agregarMultiples:', {
-      url: `/Menu_dias_Productos/menu-dias/${menuId}/productos/multiples`,
-      productos: productos
-    });
+    console.log('📤 Agregando múltiples productos al menú:', menuId, productos);
     return api.post(`/Menu_dias_Productos/menu-dias/${menuId}/productos/multiples`, { productos });
   },
   
   // Agregar producto individual
-  agregarProducto: (menuId, producto) => 
-    api.post(`/Menu_dias_Productos/menu-dias/${menuId}/productos`, producto),
+  agregarProducto: (menuId, producto) => {
+    console.log('📤 Agregando producto al menú:', menuId, producto);
+    return api.post(`/Menu_dias_Productos/menu-dias/${menuId}/productos`, producto);
+  },
   
   // Cambiar disponibilidad
-  cambiarDisponibilidad: (itemId, disponible) => 
-    api.patch(`/Menu_dias_Productos/${itemId}/disponibilidad`, { disponible }),
+  cambiarDisponibilidad: (itemId, disponible) => {
+    console.log('📤 Cambiando disponibilidad:', itemId, disponible);
+    return api.patch(`/Menu_dias_Productos/${itemId}/disponibilidad`, { disponible });
+  },
   
   // Copiar menú
-  copiarMenu: (menuId, datosCopia) => 
-    api.post(`/Menu_dias_Productos/menu-dias/${menuId}/copiar`, datosCopia),
+  copiarMenu: (menuId, datosCopia) => {
+    console.log('📤 Copiando menú:', menuId, datosCopia);
+    return api.post(`/Menu_dias_Productos/menu-dias/${menuId}/copiar`, datosCopia);
+  },
   
   // Activar todos los productos
-  activarTodos: (menuId) => 
-    api.patch(`/Menu_dias_Productos/menu-dias/${menuId}/productos/activar-todos`),
+  activarTodos: (menuId) => {
+    console.log('📤 Activando todos los productos del menú:', menuId);
+    return api.patch(`/Menu_dias_Productos/menu-dias/${menuId}/productos/activar-todos`);
+  },
   
   // Desactivar todos los productos
-  desactivarTodos: (menuId) => 
-    api.patch(`/Menu_dias_Productos/menu-dias/${menuId}/productos/desactivar-todos`),
+  desactivarTodos: (menuId) => {
+    console.log('📤 Desactivando todos los productos del menú:', menuId);
+    return api.patch(`/Menu_dias_Productos/menu-dias/${menuId}/productos/desactivar-todos`);
+  },
   
   // Limpiar menú (eliminar todos los productos)
-  limpiarMenu: (menuId) => 
-    api.delete(`/Menu_dias_Productos/menu-dias/${menuId}/productos`),
+  limpiarMenu: (menuId) => {
+    console.log('📤 Limpiando menú:', menuId);
+    return api.delete(`/Menu_dias_Productos/menu-dias/${menuId}/productos`);
+  },
   
   // Eliminar producto del menú
-  eliminarProducto: (itemId) => 
-    api.delete(`/Menu_dias_Productos/${itemId}`),
+  eliminarProducto: (itemId) => {
+    console.log('📤 Eliminando producto del menú:', itemId);
+    return api.delete(`/Menu_dias_Productos/${itemId}`);
+  }
 };
 
 // ============================================
@@ -223,8 +324,14 @@ export const menuDiasProductosService = {
 // ============================================
 export const usuarioService = {
   // Autenticación
-  login: (credenciales) => api.post('/usuarios/login', credenciales),
-  registro: (usuario) => api.post('/usuarios/registro', usuario),
+  login: (credenciales) => {
+    console.log('📤 Login:', credenciales.email);
+    return api.post('/usuarios/login', credenciales);
+  },
+  registro: (usuario) => {
+    console.log('📤 Registro:', usuario.email);
+    return api.post('/usuarios/registro', usuario);
+  },
   getPerfil: () => api.get('/usuarios/perfil'),
   
   // CRUD de usuarios
@@ -233,19 +340,77 @@ export const usuarioService = {
   getByEmail: (email) => api.get(`/usuarios/email/${email}`),
   
   // Crear y actualizar
-  create: (usuario) => api.post('/usuarios/registro', usuario),
-  update: (id, usuario) => api.put(`/usuarios/${id}`, usuario),
+  create: (usuario) => {
+    console.log('📤 Creando usuario:', usuario);
+    return api.post('/usuarios/registro', usuario);
+  },
+  update: (id, usuario) => {
+    console.log('📤 Actualizando usuario:', id, usuario);
+    return api.put(`/usuarios/${id}`, usuario);
+  },
   
   // Cambios de estado
-  cambiarEstado: (id, activo) => api.patch(`/usuarios/${id}/estado`, { activo }),
-  cambiarRol: (id, rol) => api.patch(`/usuarios/${id}/rol`, { rol }),
+  cambiarEstado: (id, activo) => {
+    console.log('📤 Cambiando estado de usuario:', id, activo);
+    return api.patch(`/usuarios/${id}/estado`, { activo });
+  },
+  cambiarRol: (id, rol) => {
+    console.log('📤 Cambiando rol de usuario:', id, rol);
+    return api.patch(`/usuarios/${id}/rol`, { rol });
+  },
   
   // Eliminar
-  delete: (id) => api.delete(`/usuarios/${id}`),
+  delete: (id) => {
+    console.log('📤 Eliminando usuario:', id);
+    return api.delete(`/usuarios/${id}`);
+  },
   
   // Estadísticas y reportes
   getEstadisticas: () => api.get('/usuarios/estadisticas'),
-  getReporteRegistros: () => api.get('/usuarios/reportes/registros'),
+  getReporteRegistros: () => api.get('/usuarios/reportes/registros')
+};
+
+// ============================================
+// UTILIDADES
+// ============================================
+
+// Función para verificar la conexión con el backend
+export const verificarConexion = async () => {
+  try {
+    const response = await api.get('/health');
+    console.log('✅ Conexión con backend exitosa');
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error('❌ Error de conexión con backend:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Función para manejar errores de API de forma consistente
+export const manejarErrorAPI = (error) => {
+  if (error.response) {
+    // El servidor respondió con un código de estado fuera del rango 2xx
+    return {
+      success: false,
+      error: error.response.data?.message || error.response.data?.error || 'Error en el servidor',
+      status: error.response.status,
+      data: error.response.data
+    };
+  } else if (error.request) {
+    // La petición fue hecha pero no se recibió respuesta
+    return {
+      success: false,
+      error: 'No se pudo conectar con el servidor. Verifica tu conexión.',
+      status: 0
+    };
+  } else {
+    // Algo pasó al configurar la petición
+    return {
+      success: false,
+      error: error.message || 'Error desconocido',
+      status: 0
+    };
+  }
 };
 
 export default api;
