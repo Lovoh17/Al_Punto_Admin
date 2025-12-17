@@ -1449,17 +1449,7 @@ const styles = {
     display: 'flex',
     gap: '16px'
   },
-  statItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    fontSize: '12px',
-    color: colors.text.secondary
-  },
-  statIcon: {
-    color: colors.primary,
-    fontSize: '13px'
-  },
+  
   menuCardFooter: {
     display: 'flex',
     gap: '8px',
