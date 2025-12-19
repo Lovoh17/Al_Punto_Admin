@@ -21,8 +21,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           
 
-          {/* Rutas protegidas */}
-          <Route element={<PrivateRoute />}>
+          
             <Route element={<Layout />}>
               <Route path="/admin/dashboard" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<Dashboard />} />
@@ -32,7 +31,7 @@ function App() {
               <Route path="/Usuarios" element={<UsuariosPage />} />
               <Route path="/pedidos" element={<PedidosPage />} />
             </Route>
-          </Route>
+          
 
           {/* Redirección por defecto */}
           <Route path="*" element={<Navigate to="/login" replace />} />
