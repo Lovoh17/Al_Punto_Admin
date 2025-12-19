@@ -291,7 +291,7 @@ const agregarProductosMenu = async (menuId, productos) => {
     });
 
     console.log('📤 productosParaEnviar:', JSON.stringify(productosParaEnviar, null, 2));
-    console.log('🌐 URL:', `http://localhost:4000/api/Menu_dias_Productos/menu-dias/${menuId}/productos/multiples`);
+    console.log('🌐 URL:', `https://backend-al-punto.onrender.com/api//Menu_dias_Productos/menu-dias/${menuId}/productos/multiples`);
     console.log('📤 Body completo:', JSON.stringify({ productos: productosParaEnviar }, null, 2));
 
     const response = await menuDiasProductosService.agregarMultiples(menuId, productosParaEnviar);

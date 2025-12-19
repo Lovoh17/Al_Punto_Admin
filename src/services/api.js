@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:4000/api',
+  baseURL: 'https://backend-al-punto.onrender.com/api/',
   timeout: 15000, // Aumentado a 15 segundos para backend en render
   headers: {
     'Content-Type': 'application/json',
