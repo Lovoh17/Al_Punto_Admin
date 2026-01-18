@@ -13,7 +13,7 @@ const LightNavbar = () => {
     { path: '/productos', label: 'Productos' },
     { path: '/categorias', label: 'Categorias' },
     { path: '/pedidos', label: 'Pedidos' },
-    { path: '/Menu-Dias', label: 'Menus Diarios' },
+    { path: '/Produccion', label: 'Menus Diarios' },
     { path: '/Usuarios', label: 'Usuarios' }
   ];
 

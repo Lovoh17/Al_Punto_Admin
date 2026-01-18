@@ -11,6 +11,7 @@ import UsuariosPage from './pages/GestionUsuarios';
 import PedidosPage from './pages/PedidosPage';
 import CategoriasPage from './pages/CategoriasPage';
 import Login from './components/Login';
+import ProdccionPage from './pages/Producction'
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
               <Route path="/Menu-Dias" element={<MenuDiasPage />} />
               <Route path="/Usuarios" element={<UsuariosPage />} />
               <Route path="/pedidos" element={<PedidosPage />} />
+              <Route path="/Produccion" element={<ProdccionPage />} />
             </Route>
           
 

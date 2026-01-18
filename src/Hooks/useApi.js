@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://backend-al-punto.onrender.com/api/',
+  baseURL: 'https://backend-alpunto-production.up.railway.app/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

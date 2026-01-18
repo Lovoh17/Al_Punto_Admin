@@ -1,9 +1,8 @@
-// src/pages/PedidosPage.jsx (CON SISTEMA DE NOTIFICACIONES)
 import React, { useState, useEffect, useMemo } from 'react';
 import { usePedidos } from '../Hooks/usePedidos';
 import PedidoCard from '../components/Pedidos/PedidosCards';
 import PedidoDetalleModal from '../components/Pedidos/PedidoDetalleModal';
-import { ToastContainer, useToast } from '../components/Toast/Toast'; // Importar sistema Toast
+import { ToastContainer, useToast } from '../components/Toast/Toast';
 import { 
   FaShoppingCart, 
   FaFilter, 
@@ -17,7 +16,17 @@ import {
   FaExclamationTriangle,
   FaPrint,
   FaEye,
-  FaSync
+  FaSync,
+  FaCalendarDay,
+  FaClipboardList,
+  FaChartPie,
+  FaFire,
+  FaPercent,
+  FaListAlt,
+  FaHamburger,
+  FaPizzaSlice,
+  FaCoffee,
+  FaIceCream
 } from 'react-icons/fa';
 
 const PedidosPage = () => {
@@ -32,7 +41,7 @@ const PedidosPage = () => {
     refetchPedidos
   } = usePedidos();
 
-  const toast = useToast(); // Hook de Toast
+  const toast = useToast();
 
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,7 +63,6 @@ const PedidosPage = () => {
     const cancelados = pedidos.filter(p => p.estado === 'cancelado').length;
     const totalVentas = pedidos.reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
     
-    // Ventas por estado
     const ventasPendientes = pedidos
       .filter(p => p.estado === 'pendiente')
       .reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
@@ -62,6 +70,63 @@ const PedidosPage = () => {
     const ventasEntregados = pedidos
       .filter(p => p.estado === 'entregado')
       .reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
+    
+    // Obtener fecha de hoy
+    const hoy = new Date();
+    const hoyString = hoy.toISOString().split('T')[0];
+    
+    // Pedidos de hoy
+    const pedidosHoy = pedidos.filter(p => {
+      const fechaPedido = new Date(p.fecha_pedido || p.created_at);
+      const fechaPedidoString = fechaPedido.toISOString().split('T')[0];
+      return fechaPedidoString === hoyString;
+    });
+    
+    // Análisis de productos más vendidos
+    const productosVendidos = {};
+    pedidos.forEach(pedido => {
+      if (pedido.productos && Array.isArray(pedido.productos)) {
+        pedido.productos.forEach(producto => {
+          const nombre = producto.nombre || 'Producto sin nombre';
+          const cantidad = producto.cantidad || 1;
+          if (productosVendidos[nombre]) {
+            productosVendidos[nombre].cantidad += cantidad;
+          } else {
+            productosVendidos[nombre] = {
+              cantidad: cantidad,
+              nombre: nombre
+            };
+          }
+        });
+      }
+    });
+    
+    // Convertir a array y ordenar por cantidad
+    const productosMasVendidos = Object.values(productosVendidos)
+      .sort((a, b) => b.cantidad - a.cantidad)
+      .slice(0, 5); // Top 5 productos
+
+    // Análisis por hora del día
+    const pedidosPorHora = {};
+    pedidosHoy.forEach(pedido => {
+      const fecha = new Date(pedido.fecha_pedido || pedido.created_at);
+      const hora = fecha.getHours();
+      if (pedidosPorHora[hora]) {
+        pedidosPorHora[hora]++;
+      } else {
+        pedidosPorHora[hora] = 1;
+      }
+    });
+    
+    // Encontrar hora pico
+    let horaPico = '';
+    let maxPedidos = 0;
+    Object.entries(pedidosPorHora).forEach(([hora, cantidad]) => {
+      if (cantidad > maxPedidos) {
+        maxPedidos = cantidad;
+        horaPico = `${hora}:00`;
+      }
+    });
     
     return { 
       total, 
@@ -72,7 +137,12 @@ const PedidosPage = () => {
       cancelados, 
       totalVentas,
       ventasPendientes,
-      ventasEntregados
+      ventasEntregados,
+      pedidosHoy: pedidosHoy.length,
+      ventasHoy: pedidosHoy.reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0),
+      productosMasVendidos,
+      horaPico: horaPico || 'No hay datos',
+      maxPedidosPorHora: maxPedidos
     };
   }, [pedidos]);
 
@@ -81,7 +151,7 @@ const PedidosPage = () => {
     const interval = setInterval(() => {
       refetchPedidos();
       toast.info('Pedidos actualizados automáticamente', 3000);
-    }, 30000); // 30 segundos
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [refetchPedidos, toast]);
@@ -99,7 +169,184 @@ const PedidosPage = () => {
     }
   };
 
+  // Funciones rápidas
+  const filtrarPedidosHoy = () => {
+    const hoy = new Date();
+    const hoyString = hoy.toISOString().split('T')[0];
+    setFiltroEstado('todos');
+    setSearchTerm('');
+    
+    const pedidosHoyCount = pedidos.filter(p => {
+      const fechaPedido = new Date(p.fecha_pedido || p.created_at);
+      const fechaPedidoString = fechaPedido.toISOString().split('T')[0];
+      return fechaPedidoString === hoyString;
+    }).length;
+    
+    toast.info(`${pedidosHoyCount} pedidos registrados hoy`);
+  };
+
+  const filtrarPedidosPendientes = () => {
+    setFiltroEstado('pendiente');
+    setSearchTerm('');
+    toast.info(`${stats.pendientes} pedidos pendientes`);
+  };
+
+  const verProductosMasVendidos = () => {
+    if (stats.productosMasVendidos.length === 0) {
+      toast.info('No hay datos de productos vendidos aún');
+      return;
+    }
+    
+    const productosLista = stats.productosMasVendidos
+      .map((prod, index) => `${index + 1}. ${prod.nombre}: ${prod.cantidad} unidades`)
+      .join('\n');
+    
+    alert(`🏆 TOP 5 PRODUCTOS MÁS VENDIDOS:\n\n${productosLista}`);
+  };
+
+  const verResumenDia = () => {
+    const hoy = new Date();
+    const fechaHoy = hoy.toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    
+    const resumen = `
+📅 RESUMEN DEL DÍA (${fechaHoy})
+
+📊 Pedidos totales: ${stats.pedidosHoy}
+💰 Ventas totales: $${stats.ventasHoy.toFixed(2)}
+⏰ Hora pico: ${stats.horaPico} (${stats.maxPedidosPorHora} pedidos)
+
+📈 ESTADOS ACTUALES:
+• Pendientes: ${stats.pendientes}
+• En preparación: ${stats.enPreparacion}
+• Listos: ${stats.listos}
+• Entregados: ${stats.entregados}
+• Cancelados: ${stats.cancelados}
+
+💵 VENTAS:
+• Total acumulado: $${stats.totalVentas.toFixed(2)}
+• Hoy: $${stats.ventasHoy.toFixed(2)}
+• Pendientes por cobrar: $${stats.ventasPendientes.toFixed(2)}
+    `;
+    
+    alert(resumen);
+  };
+
+  const generarResumenDiaPDF = () => {
+  // Obtener pedidos del día actual
+  const hoy = new Date();
+  const hoyString = hoy.toISOString().split('T')[0];
+  
+  const pedidosHoy = pedidos.filter(p => {
+    const fechaPedido = new Date(p.fecha_pedido || p.created_at);
+    const fechaPedidoString = fechaPedido.toISOString().split('T')[0];
+    return fechaPedidoString === hoyString;
+  });
+
+  // Verificar si hay datos
+  if (pedidosHoy.length === 0) {
+    toast.info('No hay pedidos registrados para hoy');
+    return;
+  }
+
+  // Mostrar loading
+  toast.info('Generando reporte del día...', 2000);
+
+  // Abrir ventana para imprimir
+  const ventana = window.open('', '_blank', 'width=1000,height=700');
+  
+  // Cargar contenido HTML con el PDF
+  ventana.document.open();
+  ventana.document.write(generarResumenDiaPDF(stats, pedidosHoy));
+  ventana.document.close();
+  
+  // Esperar a que cargue el contenido y luego imprimir
+  ventana.onload = function() {
+    setTimeout(() => {
+      ventana.focus();
+      ventana.print();
+      toast.success('Reporte del día generado correctamente');
+      
+      // Cerrar ventana después de imprimir
+      setTimeout(() => {
+        if (!ventana.closed) {
+          ventana.close();
+        }
+      }, 500);
+    }, 1000);
+  };
+};
+
+
+  const verEstadisticasProductos = () => {
+    if (stats.productosMasVendidos.length === 0) {
+      toast.info('No hay datos de productos aún');
+      return;
+    }
+    
+    const totalVendidos = stats.productosMasVendidos.reduce((sum, prod) => sum + prod.cantidad, 0);
+    
+    let mensaje = '📊 ESTADÍSTICAS DE PRODUCTOS\n\n';
+    
+    stats.productosMasVendidos.forEach((prod, index) => {
+      const porcentaje = ((prod.cantidad / totalVendidos) * 100).toFixed(1);
+      mensaje += `${index + 1}. ${prod.nombre}\n`;
+      mensaje += `   📦 ${prod.cantidad} unidades (${porcentaje}%)\n`;
+      mensaje += `   ${'█'.repeat(Math.round(porcentaje / 5))}\n\n`;
+    });
+    
+    mensaje += `Total unidades vendidas: ${totalVendidos}`;
+    
+    alert(mensaje);
+  };
+
+  const verRendimientoHoy = () => {
+    const hoy = new Date();
+    const fechaHoy = hoy.toLocaleDateString('es-ES', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short'
+    });
+    
+    // Calcular porcentaje de entregados vs total
+    const totalHoy = stats.pedidosHoy;
+    const entregadosHoy = pedidos.filter(p => {
+      const fechaPedido = new Date(p.fecha_pedido || p.created_at);
+      const fechaPedidoString = fechaPedido.toISOString().split('T')[0];
+      const hoyString = hoy.toISOString().split('T')[0];
+      return fechaPedidoString === hoyString && p.estado === 'entregado';
+    }).length;
+    
+    const porcentajeEntregados = totalHoy > 0 ? (entregadosHoy / totalHoy * 100).toFixed(1) : 0;
+    
+    const rendimiento = `
+🚀 RENDIMIENTO HOY (${fechaHoy})
+
+📊 PEDIDOS HOY:
+• Total: ${totalHoy}
+• Entregados: ${entregadosHoy}
+• Pendientes: ${totalHoy - entregadosHoy}
+• Eficiencia: ${porcentajeEntregados}% entregados
+
+💰 VENTAS HOY:
+• Total: $${stats.ventasHoy.toFixed(2)}
+• Ticket promedio: $${totalHoy > 0 ? (stats.ventasHoy / totalHoy).toFixed(2) : '0.00'}
+
+⏱️ TIEMPO PROMEDIO (estimado):
+• Preparación: 15-25 min
+• Entrega: 5-15 min
+    `;
+    
+    alert(rendimiento);
+  };
+
+  // Resto de las funciones existentes...
   const generarPDFContenido = (pedido) => {
+    // ... (mantener código existente)
     const formatFecha = (fechaString) => {
       try {
         const fecha = new Date(fechaString);
@@ -383,7 +630,6 @@ const PedidosPage = () => {
 
   const handleImprimirPDF = async (pedido) => {
     try {
-      // Si no tenemos los productos del detalle, cargarlos primero
       if (!productosDetalle || pedido.id !== pedidoDetalle?.id) {
         toast.info('Cargando detalles del pedido para imprimir...', 2000);
         const result = await obtenerDetallePedido(pedido.id);
@@ -395,22 +641,18 @@ const PedidosPage = () => {
         }
       }
 
-      // Abrir ventana para imprimir
       const ventana = window.open('', '_blank', 'width=800,height=600');
       
-      // Cargar contenido HTML con el PDF
       ventana.document.open();
       ventana.document.write(generarPDFContenido(pedido));
       ventana.document.close();
       
-      // Esperar a que cargue el contenido y luego imprimir
       ventana.onload = function() {
         setTimeout(() => {
           ventana.focus();
           ventana.print();
           toast.success('PDF generado correctamente');
           
-          // Cerrar ventana después de imprimir
           setTimeout(() => {
             if (!ventana.closed) {
               ventana.close();
@@ -433,15 +675,6 @@ const PedidosPage = () => {
       entregado: 'Entregado',
       cancelado: 'Cancelado'
     };
-
-    /*const confirmacion = window.confirm(
-      `¿Cambiar estado del pedido #${id} a "${estadoLabels[nuevoEstado]}"?`
-    );
-    
-    if (!confirmacion) {
-      toast.info('Cambio de estado cancelado');
-      return;
-    }*/
 
     try {
       const result = await cambiarEstado(id, nuevoEstado);
@@ -538,12 +771,10 @@ const PedidosPage = () => {
   // Filtrar pedidos con useMemo
   const pedidosFiltrados = useMemo(() => {
     return pedidos.filter(pedido => {
-      // Filtrar por estado
       if (filtroEstado !== 'todos' && pedido.estado !== filtroEstado) {
         return false;
       }
       
-      // Filtrar por búsqueda
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         return (
@@ -588,10 +819,9 @@ const PedidosPage = () => {
 
   return (
     <div style={styles.container}>
-      {/* Sistema de notificaciones Toast */}
       <ToastContainer toasts={toast.toasts} removeToast={toast.removeToast} />
 
-      {/* Modal de confirmación para cancelar */}
+      {/* Modales de confirmación */}
       {showCancelConfirm && (
         <div style={styles.confirmOverlay}>
           <div style={styles.confirmModal}>
@@ -628,7 +858,6 @@ const PedidosPage = () => {
         </div>
       )}
 
-      {/* Modal de confirmación para eliminar */}
       {showDeleteConfirm && (
         <div style={styles.confirmOverlay}>
           <div style={styles.confirmModal}>
@@ -688,11 +917,130 @@ const PedidosPage = () => {
             <span style={styles.statValue}>{stats.total}</span>
           </div>
           <div style={styles.statItem}>
-            <span style={styles.statLabel}>Total Ventas</span>
+            <span style={styles.statLabel}>Ventas Totales</span>
             <span style={styles.statValue}>
               ${stats.totalVentas.toFixed(2)}
             </span>
           </div>
+          <div style={styles.statItem}>
+            <span style={styles.statLabel}>Hoy</span>
+            <span style={styles.statValue}>
+              {stats.pedidosHoy}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Funciones Rápidas */}
+      <div style={styles.quickActions}>
+        <div style={styles.quickActionsHeader}>
+          <h3 style={styles.quickActionsTitle}>
+            <FaFire style={styles.quickActionsIcon} />
+            Funciones Rápidas
+          </h3>
+          <span style={styles.quickActionsSubtitle}>
+            Acciones instantáneas para análisis rápido
+          </span>
+        </div>
+        
+        <div style={styles.quickActionsGrid}>
+          <button
+            onClick={filtrarPedidosHoy}
+            style={styles.quickActionButton}
+            title="Ver pedidos del día de hoy"
+          >
+            <div style={styles.quickActionIcon}>
+              <FaCalendarDay />
+            </div>
+            <div style={styles.quickActionContent}>
+              <span style={styles.quickActionTitle}>Pedidos Hoy</span>
+              <span style={styles.quickActionSubtitle}>
+                {stats.pedidosHoy} pedidos • ${stats.ventasHoy.toFixed(2)}
+              </span>
+            </div>
+          </button>
+
+          <button
+            onClick={filtrarPedidosPendientes}
+            style={styles.quickActionButton}
+            title="Filtrar solo pedidos pendientes"
+          >
+            <div style={styles.quickActionIcon}>
+              <FaClipboardList />
+            </div>
+            <div style={styles.quickActionContent}>
+              <span style={styles.quickActionTitle}>Pendientes</span>
+              <span style={styles.quickActionSubtitle}>
+                {stats.pendientes} pedidos • ${stats.ventasPendientes.toFixed(2)}
+              </span>
+            </div>
+          </button>
+
+          <button
+            onClick={verProductosMasVendidos}
+            style={styles.quickActionButton}
+            title="Ver top 5 productos más vendidos"
+          >
+            <div style={styles.quickActionIcon}>
+              <FaChartPie />
+            </div>
+            <div style={styles.quickActionContent}>
+              <span style={styles.quickActionTitle}>Top Productos</span>
+              <span style={styles.quickActionSubtitle}>
+                {stats.productosMasVendidos.length} productos
+              </span>
+            </div>
+          </button>
+
+          <button
+  onClick={generarResumenDiaPDF}
+  style={styles.quickActionButton}
+  title="Generar reporte PDF del día"
+>
+  <div style={styles.quickActionIcon}>
+    
+  </div>
+  <div style={styles.quickActionContent}>
+    <span style={styles.quickActionTitle}>Reporte del Día</span>
+    <span style={styles.quickActionSubtitle}>
+      PDF con estadísticas
+    </span>
+  </div>
+</button>
+
+          
+
+          <button
+            onClick={verEstadisticasProductos}
+            style={styles.quickActionButton}
+            title="Ver estadísticas detalladas de productos"
+          >
+            <div style={styles.quickActionIcon}>
+              <FaListAlt />
+            </div>
+            <div style={styles.quickActionContent}>
+              <span style={styles.quickActionTitle}>Estadísticas</span>
+              <span style={styles.quickActionSubtitle}>
+                Análisis de productos
+              </span>
+            </div>
+          </button>
+
+          <button
+            onClick={verRendimientoHoy}
+            style={styles.quickActionButton}
+            title="Ver rendimiento y eficiencia del día"
+          >
+            <div style={styles.quickActionIcon}>
+              <FaChartBar />
+            </div>
+            <div style={styles.quickActionContent}>
+              <span style={styles.quickActionTitle}>Rendimiento</span>
+              <span style={styles.quickActionSubtitle}>
+                Eficiencia del día
+              </span>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -1030,7 +1378,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '32px',
+    marginBottom: '24px',
     flexWrap: 'wrap',
     gap: '20px'
   },
@@ -1086,9 +1434,85 @@ const styles = {
     color: colors.primary
   },
   
+  // Funciones Rápidas
+  quickActions: {
+    backgroundColor: colors.card,
+    borderRadius: '12px',
+    padding: '24px',
+    marginBottom: '24px',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.1)',
+    border: `1px solid ${colors.border}`
+  },
+  quickActionsHeader: {
+    marginBottom: '20px'
+  },
+  quickActionsTitle: {
+    fontSize: '20px',
+    fontWeight: '700',
+    color: colors.text.primary,
+    margin: '0 0 8px 0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  },
+  quickActionsIcon: {
+    color: colors.danger
+  },
+  quickActionsSubtitle: {
+    fontSize: '14px',
+    color: colors.text.secondary,
+    margin: 0
+  },
+  quickActionsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+    gap: '16px'
+  },
+  quickActionButton: {
+    backgroundColor: colors.card,
+    border: `2px solid ${colors.border}`,
+    borderRadius: '10px',
+    padding: '16px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    textAlign: 'left',
+    width: '100%'
+  },
+  quickActionIcon: {
+    width: '48px',
+    height: '48px',
+    backgroundColor: colors.primary + '10',
+    color: colors.primary,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '10px',
+    fontSize: '20px',
+    flexShrink: 0
+  },
+  quickActionContent: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px'
+  },
+  quickActionTitle: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: colors.text.primary
+  },
+  quickActionSubtitle: {
+    fontSize: '12px',
+    color: colors.text.secondary,
+    fontWeight: '500'
+  },
+  
   // Estadísticas
   statsContainer: {
-    marginBottom: '32px'
+    marginBottom: '24px'
   },
   statsGrid: {
     display: 'grid',
@@ -1610,9 +2034,15 @@ if (typeof document !== 'undefined') {
       cursor: not-allowed;
     }
     
-    .stat-card:hover {
+    .stat-card:hover,
+    .quick-action-button:hover {
       transform: translateY(-4px);
       box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    }
+    
+    .quick-action-button:hover {
+      border-color: ${colors.primary};
+      background-color: ${colors.primary + '05'};
     }
   `;
   document.head.appendChild(styleSheet);
