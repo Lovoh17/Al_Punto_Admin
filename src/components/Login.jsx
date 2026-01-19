@@ -44,7 +44,7 @@ const Login = () => {
         <div style={styles.header}>
           <div style={styles.logoContainer}>
   <img 
-    src="/src//assets/Images/Logos/logo-remove.png" 
+    src="src\assets\Images\Logos\logo-remove.png" 
     alt="Logo del Restaurante" 
     style={styles.logoImage}
     onError={(e) => {
@@ -52,6 +52,7 @@ const Login = () => {
       e.target.nextSibling.style.display = 'flex';
     }}
   />
+  
 </div>
         </div>
 
