@@ -694,23 +694,34 @@ const PedidosPage = () => {
     setShowCancelConfirm(true);
   };
 
-  const handleConfirmCancel = async () => {
-    if (pedidoSeleccionado) {
-      try {
-        const result = await cancelarPedido(pedidoSeleccionado.id);
-        if (result.success) {
-          toast.success(' Pedido cancelado exitosamente');
-        } else {
-          toast.error(` ${result.error || 'Error al cancelar el pedido'}`);
-        }
-      } catch (error) {
-        console.log(error);
-        toast.error(' Error al cancelar el pedido');
+  // En PedidosPage.jsx, modificar la función handleConfirmCancel:
+const handleConfirmCancel = async () => {
+  if (pedidoSeleccionado) {
+    try {
+      // ✅ Asegurarte de obtener el ID correcto
+      const pedidoId = pedidoSeleccionado.id || pedidoSeleccionado.pedido_id;
+      
+      console.log('🟡 ID a cancelar:', pedidoId);
+      
+      if (!pedidoId) {
+        toast.error('No se pudo obtener el ID del pedido');
+        return;
       }
+      
+      const result = await cancelarPedido(pedidoId);
+      if (result.success) {
+        toast.success(' Pedido cancelado exitosamente');
+      } else {
+        toast.error(` ${result.error || 'Error al cancelar el pedido'}`);
+      }
+    } catch (error) {
+      console.error('Error al cancelar pedido:', error);
+      toast.error(' Error al cancelar el pedido');
     }
-    setShowCancelConfirm(false);
-    setPedidoSeleccionado(null);
-  };
+  }
+  setShowCancelConfirm(false);
+  setPedidoSeleccionado(null);
+};
 
   const handleEliminarClick = (pedido) => {
     setPedidoSeleccionado(pedido);

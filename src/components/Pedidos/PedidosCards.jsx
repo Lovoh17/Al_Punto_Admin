@@ -264,7 +264,7 @@ const PedidoCard = ({
             )}
             
             <button
-              onClick={() => onCancelar(pedido.id)}
+              onClick={() => onCancelar(pedido)}
               style={styles.cancelButton}
               title="Cancelar pedido"
             >
@@ -279,7 +279,7 @@ const PedidoCard = ({
             onClick={(e) => {
               e.stopPropagation();
               if (window.confirm('¿Eliminar este pedido?')) {
-                onEliminar(pedido.id);
+                onEliminar(pedido);
               }
             }}
             style={styles.optionsButton}

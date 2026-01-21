@@ -89,31 +89,57 @@ export const usePedidos = (filtros = {}) => {
     }
   };
 
-  const cancelarPedido = async (id) => {
-    try {
-      const response = await pedidoService.cancelar(id);
-      await fetchPedidos(); // Recargar lista
-      return { success: true, data: response.data };
-    } catch (err) {
-      return { 
-        success: false, 
-        error: err.response?.data?.message || 'Error al cancelar pedido' 
-      };
+  
+  // src/Hooks/usePedidos.js (parte corregida)
+const cancelarPedido = async (id) => {
+  try {
+    console.log('🗑️ Cancelando pedido con ID:', id, 'Tipo:', typeof id);
+    
+    // ✅ Validación del ID
+    if (!id) {
+      throw new Error('ID de pedido no proporcionado');
     }
-  };
+    
+    // ✅ Convertir a número si es necesario
+    const idNumerico = Number(id);
+    if (isNaN(idNumerico) || idNumerico <= 0) {
+      throw new Error(`ID de pedido inválido: "${id}"`);
+    }
+    
+    // ✅ Llamar al servicio
+    const response = await pedidoService.cancelar(idNumerico); // Asegúrate de tener este método en tu servicio
+    
+    // ✅ Verificar respuesta
+    if (response.data && !response.data.success) {
+      throw new Error(response.data.error || 'Error al cancelar pedido');
+    }
+    
+    // ✅ Recargar lista
+    await fetchPedidos();
+    
+    return { 
+      success: true, 
+      message: 'Pedido cancelado exitosamente',
+      data: response.data 
+    };
+    
+  } catch (err) {
+    console.error('❌ Error en cancelarPedido:', err);
+    
+    return { 
+      success: false, 
+      error: err.response?.data?.error || 
+             err.response?.data?.message || 
+             err.message || 
+             'Error al cancelar pedido' 
+    };
+  }
+};
+
 
   const eliminarPedido = async (id) => {
-    try {
-      await pedidoService.delete(id);
-      await fetchPedidos(); // Recargar lista
-      return { success: true };
-    } catch (err) {
-      return { 
-        success: false, 
-        error: err.response?.data?.message || 'Error al eliminar pedido' 
-      };
-    }
-  };
+  
+};
 
   // Obtener estadísticas generales
   const obtenerEstadisticas = async () => {

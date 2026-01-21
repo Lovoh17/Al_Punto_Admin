@@ -129,13 +129,34 @@ export const pedidoService = {
     return api.patch(`/Pedidos/${id}/estado`, { estado });
   },
   cancelar: (id) => {
-    console.log('📤 Cancelando pedido:', id);
+    console.log('🗑️ [SERVICE] Cancelando pedido:', id, 'Tipo:', typeof id);
+    
+    // ✅ VALIDAR ID ANTES DE ENVIAR
+    if (!id) {
+      throw new Error('ID no proporcionado para eliminar pedido');
+    }
+    
+    const idNumerico = parseInt(id);
+    if (isNaN(idNumerico)) {
+      throw new Error(`ID inválido: "${id}" - Debe ser un número`);
+    }
     return api.patch(`/Pedidos/${id}/cancelar`);
   },
   delete: (id) => {
-    console.log('📤 Eliminando pedido:', id);
-    return api.delete(`/Pedidos/${id}`);
-  }
+    console.log('🗑️ [SERVICE] Eliminando pedido:', id, 'Tipo:', typeof id);
+    
+    // ✅ VALIDAR ID ANTES DE ENVIAR
+    if (!id) {
+      throw new Error('ID no proporcionado para eliminar pedido');
+    }
+    
+    const idNumerico = parseInt(id);
+    if (isNaN(idNumerico)) {
+      throw new Error(`ID inválido: "${id}" - Debe ser un número`);
+    }
+    
+    return api.delete(`/Pedidos/${idNumerico}`);
+  },
 };
 
 // ============================================
